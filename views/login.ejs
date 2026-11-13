@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abs - Login</title>
+</head>
+<body>
+  <h1>Login</h1>
+  <% if (locals.error) { %>
+    <p style="color:red"><%= error %></p>
+  <% } %>
+  <form method="POST">
+    <p><input name="username" placeholder="Username" autocomplete="username" required></p>
+    <p><input name="password" type="password" placeholder="Password" autocomplete="current-password" required></p>
+    <p><button>Log in</button></p>
+  </form>
+  <p><a href="/register">Register</a></p>
+</body>
+</html>
