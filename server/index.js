@@ -42,6 +42,7 @@ fastify.register(require('./auth'));
 fastify.register(require('./groups'));
 fastify.register(require('./study'), { sessionStore, cookieSigner });
 fastify.register(require('./history'));
+fastify.register(require('./push'));
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');

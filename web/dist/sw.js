@@ -16,12 +16,10 @@ self.addEventListener('fetch', (e) => {
   const { request } = e;
   const url = new URL(request.url);
 
-  // Never cache API or WebSocket
   if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/group/')) {
     return;
   }
 
-  // Only cache same-origin GET requests for the static shell
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   e.respondWith(
@@ -34,6 +32,34 @@ self.addEventListener('fetch', (e) => {
         return res;
       });
       return cached || fetchPromise;
+    })
+  );
+});
+
+self.addEventListener('push', (e) => {
+  let data = { title: 'abs', body: 'Time to study together' };
+  if (e.data) {
+    try { data = e.data.json(); } catch (e) {}
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'abs', {
+      body: data.body || 'Time to study together',
+      icon: data.icon || '/icon.svg',
+      data: data.data || {},
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data && e.notification.data.url;
+  if (!url) return;
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
+      for (const client of clientsList) {
+        if (client.url === url && 'focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });

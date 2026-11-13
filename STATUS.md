@@ -1,44 +1,44 @@
-# STATUS — Build step 5 done
+# STATUS — Build step 6 done
 
 ## Run
 `node server/index.js` — listens on `0.0.0.0:3000` (or `$PORT`)
 
-## Changes in step 5
+Set these env vars for push notifications:
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+- Push/nudge silently no-ops (no error) when VAPID keys are missing, so the app works without them for testing.
 
-### Signup code
-- `SIGNUP_CODE` env var: if set, registration requires the matching code. If unset (dev), anyone can register.
-- Register form conditionally shows the `signup_code` field.
+## Changes in step 6
 
-### Rate limiting
-- `server/rateLimit.js` — simple in-memory per-IP rate limiter.
-- Login: max 10 attempts per 60 s window (returns 429 with error page).
-- Register: max 5 attempts per 60 s window.
+### Database
+- `push_subscriptions(id, user_id, endpoint, keys_json, created_at)` — unique endpoint per device
+- `nudges(id, from_user, to_user, group_id, created_at)` — indexed on `(from_user, to_user, group_id)` for cooldown lookups
 
-### Secure cookies & proxy
-- `trustProxy: 1` when `NODE_ENV=production` or `TRUST_PROXY` is set.
-- Session cookie: `secure`, `httpOnly`, `sameSite: 'Lax'`.
-- WebSocket upgrade handler checks `x-forwarded-proto` for `wss://` behind a proxy.
+### New file: `server/push.js`
+- `GET /push/vapid-public-key` — returns the VAPID public key (no auth, used by the browser before subscribing)
+- `POST /push/subscribe` — saves a push subscription for the current user (auth required)
+- `POST /push/unsubscribe` — removes a subscription (auth required)
+- `POST /group/:id/nudge/:userId` — nudge endpoint: checks both users are active members, enforces 10-minute cooldown, logs the nudge, sends push to all target subscriptions, deletes subscriptions that return 404/410
 
-### PWA
-- `web/dist/site.webmanifest` — name "abs", standalone display, theme colour `#6366f1`, SVG icons at 192/512 plus maskable.
-- `web/dist/icon.svg` and `web/dist/icon-maskable.svg` — indigo gradient "A".
-- `web/dist/sw.js` — caches only `/`, `/login`, `/register` (static shell). Never caches API calls (`/group/*`, `/ws/*`).
-- All EJS views include `_head.ejs` partial with theme-color, apple-touch-icon (SVG), manifest link, iOS meta tags (`apple-mobile-web-app-capable`).
-- Install prompt on home page: Android uses `beforeinstallprompt` event; iOS shows "Share then Add to Home Screen" instructions.
+### Modified: `server/index.js`
+- Registers the `push.js` plugin
 
-### New files
-- `server/rateLimit.js`
-- `views/_head.ejs`
-- `web/dist/site.webmanifest`
-- `web/dist/sw.js`
-- `web/dist/icon.svg`
-- `web/dist/icon-maskable.svg`
+### Modified: `server/db.js`
+- Creates `push_subscriptions` and `nudges` tables
 
-### Modified files
-- `server/index.js` — trustProxy, port from env, secure cookie config
-- `server/auth.js` — signup code, rate limiting on POST /login and /register
-- `server/study.js` — WebSocket proxy detection via x-forwarded-proto
-- `views/login.ejs`, `views/register.ejs`, `views/home.ejs`, `views/group.ejs`, `views/create-group.ejs`, `views/history.ejs`, `views/join.ejs` — include `_head`, install prompt on home, signup code field on register
+### Modified: `web/dist/sw.js`
+- Added `push` event handler: shows notification with generic "Time to study together" text, opens group page on click
+- Added `notificationclick` event handler: focuses existing window or opens new one
+
+### Modified: `views/group.ejs`
+- Notification section: status text + "Turn on notifications" button (only shows when permission is `default`)
+- Permission check on page load; `requestPermission()` only when button is tapped (iPhone requirement)
+- `GET /push/vapid-public-key` → subscribe with `applicationServerKey`
+- Nudge column in members table: button next to non-studying members
+- Nudge UI feedback: green "Nudged!" on success, red error message on failure/cooldown (clears after 4 s)
+- Nudge button is hidden while the member is studying (re-evaluated on each WS update + render call)
+
+### New dependency
+- `web-push` — used server-side to send push notifications with VAPID
 
 ## Known problems (unchanged)
 - Session cookie invalidated on server restart (dev secret changes). Set `SESSION_SECRET` env var.
@@ -46,3 +46,4 @@
 - No CSP/helmet headers.
 - Pause and stop are the same server-side action (both close the session); "resume" calls start.
 - Rate limiter resets on server restart (in-memory, not shared across processes).
+- No VAPID key generation helper — generate keys with `node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log('Public:',k.publicKey);console.log('Private:',k.privateKey)"`

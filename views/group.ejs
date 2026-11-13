@@ -30,9 +30,13 @@
       </p>
       <p><em>Session closes automatically after 3&nbsp;min without a heartbeat.</em></p>
 
+      <h2>Notifications</h2>
+      <p id="notif-status" style="color:#999">Loading…</p>
+      <button id="notif-btn" type="button" style="display:none">Turn on notifications</button>
+
       <h2>Members</h2>
       <table border="1" cellpadding="4">
-        <tr><th>Username</th><th>Status</th><th>This week</th><th>Role</th>
+        <tr><th>Username</th><th>Status</th><th>This week</th><th>Role</th><th>Nudge</th>
           <% if (membership.role === 'admin') { %><th>Actions</th><% } %>
         </tr>
       <% members.forEach(function(m) { %>
@@ -41,6 +45,12 @@
           <td class="status"></td>
           <td class="week"></td>
           <td><%= m.role %></td>
+          <td>
+            <% if (m.userId !== session.userId) { %>
+              <button class="nudge-btn" data-user="<%= m.userId %>" type="button">Nudge</button>
+              <span class="nudge-msg" style="color:red;font-size:0.9em"></span>
+            <% } %>
+          </td>
           <% if (membership.role === 'admin' && m.role !== 'admin') { %>
             <td>
               <form method="POST" action="/group/<%= group.id %>/remove/<%= m.userId %>" style="display:inline">
@@ -174,6 +184,8 @@
           if (statusEl) statusEl.textContent = statusText(m);
           var weekEl = row.querySelector('.week');
           if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs);
+          var nudgeBtn = row.querySelector('.nudge-btn');
+          if (nudgeBtn) nudgeBtn.style.display = m.studying ? 'none' : 'inline';
         }
         if (me) {
           document.getElementById('timer-status').textContent = me.studying
@@ -216,6 +228,102 @@
       });
       document.getElementById('stop-btn').addEventListener('click', function() {
         fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
+      });
+
+      // --- Nudge buttons ---
+      document.querySelectorAll('.nudge-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var targetId = btn.getAttribute('data-user');
+          var msgEl = btn.parentElement.querySelector('.nudge-msg');
+          msgEl.textContent = '';
+          fetch(GROUP_PATH + '/nudge/' + targetId, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (d.ok) {
+                msgEl.style.color = 'green';
+                msgEl.textContent = 'Nudged!';
+              } else {
+                msgEl.style.color = 'red';
+                msgEl.textContent = d.error || 'Failed';
+              }
+              setTimeout(function() { msgEl.textContent = ''; }, 4000);
+            })
+            .catch(function() {});
+        });
+      });
+
+      // --- Notifications ---
+      var notifStatus = document.getElementById('notif-status');
+      var notifBtn = document.getElementById('notif-btn');
+      var vapidAvailable = false;
+
+      function updateNotifUI(subscribed) {
+        if (!('Notification' in window)) {
+          notifStatus.textContent = 'Notifications not supported';
+          notifBtn.style.display = 'none';
+          return;
+        }
+        if (!vapidAvailable) {
+          notifStatus.textContent = 'VAPID not configured on server (set VAPID_PUBLIC_KEY env)';
+          notifBtn.style.display = 'none';
+          return;
+        }
+        if (Notification.permission === 'denied') {
+          notifStatus.textContent = 'Notifications blocked - enable in browser settings';
+          notifBtn.style.display = 'none';
+        } else if (subscribed) {
+          notifStatus.textContent = 'Notifications on';
+          notifBtn.textContent = 'Resubscribe';
+          notifBtn.style.display = 'inline';
+        } else {
+          notifStatus.textContent = Notification.permission === 'granted' ? 'Notifications off (resubscribe below)' : 'Notifications off';
+          notifBtn.textContent = 'Turn on notifications';
+          notifBtn.style.display = 'inline';
+        }
+      }
+
+      notifBtn.addEventListener('click', function() {
+        if (Notification.permission === 'granted') {
+          subscribeForPush();
+        } else {
+          Notification.requestPermission().then(function(perm) {
+            if (perm === 'granted') subscribeForPush();
+            updateNotifUI(false);
+          });
+        }
+      });
+
+      function subscribeForPush() {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        navigator.serviceWorker.ready.then(function(reg) {
+          fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+            if (!d.key) return;
+            vapidAvailable = true;
+            var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
+            while (raw.length % 4) raw += '=';
+            var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+            reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
+              .then(function(sub) {
+                fetch('/push/subscribe', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+                }).then(function() {
+                  updateNotifUI(true);
+                }).catch(function() {
+                  notifStatus.textContent = 'Failed to save subscription';
+                });
+              }).catch(function(e) {
+                notifStatus.textContent = 'Subscription failed: ' + e.message;
+              });
+          });
+        });
+      }
+
+      // prime vapidAvailable on page load
+      fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+        vapidAvailable = !!d.key;
+        updateNotifUI(false);
       });
 
       setInterval(render, 1000);
