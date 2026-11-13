@@ -29,6 +29,9 @@ module.exports = async function (fastify, opts) {
     }
 
     const members = weeks[0].totals.map(t => t.username);
+    const pendingInviteCount = fastify.db.prepare(
+      "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'invited'"
+    ).get(req.session.userId).cnt;
 
     return reply.view('history', {
       session: req.session,
@@ -37,6 +40,7 @@ module.exports = async function (fastify, opts) {
       weeks,
       members,
       page,
+      pendingInviteCount,
       hasNewer: page > 0,
     });
   });

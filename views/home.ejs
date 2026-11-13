@@ -1,108 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - Home</title>
-</head>
-<body>
-  <h1>Home</h1>
-  <p>Logged in as <strong><%= session.username %></strong></p>
-  <p><a href="/create-group">Create Group</a> | <a href="/logout">Log out</a></p>
-
+<%- include('_layout', { title: 'Home', page: 'groups', pendingInviteCount: pendingInvites.length, wide: true }) %>
   <% if (locals.error) { %>
-    <p style="color:red"><%= error %></p>
+    <div class="error-strip"><%= error %></div>
   <% } %>
 
-  <h2>My Groups</h2>
-  <% if (myGroups.length === 0) { %>
-    <p><em>No groups yet.</em></p>
-  <% } else { %>
-    <ul>
-    <% myGroups.forEach(function(g) { %>
-      <li><a href="/group/<%= g.id %>"><%= g.name %></a> (<%= g.role %>)</li>
-    <% }); %>
-    </ul>
-  <% } %>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-lg)">
+    <h1 style="font-size:var(--font-xl);font-weight:700">Groups</h1>
+    <div style="display:flex;align-items:center;gap:var(--space-md);font-size:var(--font-sm)">
+      <span><%= session.username %></span>
+      <% if (hasLeetcode) { %>
+        <span class="chip chip-success">✓ LeetCode linked</span>
+      <% } else { %>
+        <a href="/leetwars" class="chip chip-warning" style="text-decoration:none">Link LeetCode</a>
+      <% } %>
+      <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
+    </div>
+  </div>
 
-  <h2>Pending Invites</h2>
-  <% if (pendingInvites.length === 0) { %>
-    <p><em>No pending invites.</em></p>
-  <% } else { %>
-    <ul>
+  <% if (pendingInvites.length > 0) { %>
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Pending Invites</h2>
     <% pendingInvites.forEach(function(g) { %>
-      <li>
-        <strong><%= g.name %></strong>
-        <form method="POST" action="/invite/<%= g.id %>/accept" style="display:inline">
-          <button>Accept</button>
-        </form>
-        <form method="POST" action="/invite/<%= g.id %>/decline" style="display:inline">
-          <button>Decline</button>
-        </form>
-      </li>
+      <div class="card" style="margin-bottom:var(--space-sm)">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div><strong><%= g.name %></strong></div>
+          <div style="display:flex;gap:var(--space-sm)">
+            <form method="POST" action="/invite/<%= g.id %>/accept"><button class="btn btn-sm btn-primary">Accept</button></form>
+            <form method="POST" action="/invite/<%= g.id %>/decline"><button class="btn btn-sm btn-secondary">Decline</button></form>
+          </div>
+        </div>
+      </div>
     <% }); %>
-    </ul>
   <% } %>
 
-  <h2>Requested (waiting for approval)</h2>
-  <% if (pendingRequests.length === 0) { %>
-    <p><em>None.</em></p>
+  <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md);margin-top:var(--space-lg)">My Groups</h2>
+  <% if (myGroups.length === 0 && pendingRequests.length === 0) { %>
+    <div class="empty-state">
+      <div class="empty-state-icon">⊞</div>
+      <div class="empty-state-title">No groups yet</div>
+      <div class="empty-state-text">Create one or join with a code.</div>
+    </div>
   <% } else { %>
-    <ul>
-    <% pendingRequests.forEach(function(g) { %>
-      <li><%= g.name %> - <em>pending approval</em></li>
+    <% myGroups.forEach(function(g) { %>
+      <div class="list-row" style="margin-bottom:2px;cursor:pointer" onclick="window.location='/group/<%= g.id %>'">
+        <div class="row-main">
+          <div class="row-label"><%= g.name %></div>
+          <div class="row-sub"><%= g.role %></div>
+        </div>
+      </div>
     <% }); %>
-    </ul>
   <% } %>
 
-  <div id="install-prompt" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#6366f1;color:#fff;padding:16px;text-align:center;z-index:999">
-    <p style="margin:0 0 8px"><strong>Install abs</strong> for the best experience</p>
-    <button id="install-btn" style="background:#fff;color:#6366f1;border:none;padding:8px 24px;border-radius:6px;font-weight:600;cursor:pointer">Install</button>
-    <button id="install-dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:8px 24px;border-radius:6px;margin-left:8px;cursor:pointer">Not now</button>
+  <% if (pendingRequests.length > 0) { %>
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md);margin-top:var(--space-lg)">Requested</h2>
+    <% pendingRequests.forEach(function(g) { %>
+      <div class="list-row"><div class="row-main"><div class="row-label"><%= g.name %></div><div class="row-sub text-secondary">pending approval</div></div></div>
+    <% }); %>
+  <% } %>
+
+  <button class="fab" id="create-group-fab" type="button" aria-label="Create group">+</button>
+
+  <!-- Create group bottom sheet -->
+  <div class="dialog-overlay" id="create-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Create group</div>
+        <button class="dialog-close" id="create-close">✕</button>
+      </div>
+      <form method="POST" action="/create-group">
+        <div style="margin-bottom:var(--space-md)">
+          <input name="name" placeholder="Group name" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <div style="margin-bottom:var(--space-lg)">
+          <label style="font-size:var(--font-sm);color:var(--text-secondary);display:block;margin-bottom:var(--space-xs)">Weekly quota (problems)</label>
+          <input name="weekly_quota" type="number" value="0" min="0"
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <button class="btn btn-primary" style="width:100%">Create</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Join with code bottom sheet -->
+  <div class="dialog-overlay" id="join-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Join with code</div>
+        <button class="dialog-close" id="join-close">✕</button>
+      </div>
+      <form method="POST" action="/join">
+        <div style="margin-bottom:var(--space-lg)">
+          <input name="code" placeholder="Invite code" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <button class="btn btn-primary" style="width:100%">Join</button>
+      </form>
+    </div>
   </div>
 
   <script>
     (function() {
-      if (window.navigator.standalone) return;
+      var fab = document.getElementById('create-group-fab');
+      var createDialog = document.getElementById('create-dialog');
+      var joinDialog = document.getElementById('join-dialog');
 
-      var KEY = 'pwa-shown';
-      if (localStorage.getItem(KEY)) return;
-
-      var deferredPrompt = null;
-      var promptEl = document.getElementById('install-prompt');
-      var installBtn = document.getElementById('install-btn');
-      var dismissBtn = document.getElementById('install-dismiss');
-
-      function hide() {
-        promptEl.style.display = 'none';
-        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      if (fab) {
+        fab.addEventListener('click', function() { createDialog.style.display = 'flex'; });
       }
+      document.getElementById('create-close').addEventListener('click', function() { createDialog.style.display = 'none'; });
+      document.getElementById('join-close').addEventListener('click', function() { joinDialog.style.display = 'none'; });
+      createDialog.addEventListener('click', function(e) { if (e.target === createDialog) createDialog.style.display = 'none'; });
+      joinDialog.addEventListener('click', function(e) { if (e.target === joinDialog) joinDialog.style.display = 'none'; });
 
-      window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        deferredPrompt = e;
-        promptEl.style.display = 'block';
-      });
-
-      installBtn.addEventListener('click', function() {
-        hide();
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then(function() { deferredPrompt = null; });
-        }
-      });
-
-      dismissBtn.addEventListener('click', hide);
-
-      // iOS fallback
-      var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      if (isiOS) {
-        promptEl.innerHTML =
-          '<p style="margin:0 0 8px"><strong>Install abs</strong><br>Tap <strong>Share</strong> <span style="font-size:20px">⎋</span> then <strong>Add to Home Screen</strong></p>' +
-          '<button id="install-dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:8px 24px;border-radius:6px;cursor:pointer">Got it</button>';
-        promptEl.style.display = 'block';
-        document.getElementById('install-dismiss').addEventListener('click', hide);
+      // Join with code - add button to top bar
+      var topBar = document.querySelector('.app-main > div:first-child');
+      if (topBar) {
+        var joinBtn = document.createElement('button');
+        joinBtn.className = 'btn btn-ghost btn-sm';
+        joinBtn.textContent = 'Join';
+        joinBtn.addEventListener('click', function() { joinDialog.style.display = 'flex'; });
+        topBar.querySelector('div:last-child').appendChild(joinBtn);
       }
     })();
   </script>
-</body>
-</html>
+<%- include('_layout_close') %>

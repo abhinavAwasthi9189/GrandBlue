@@ -1,19 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - Login</title>
-</head>
-<body>
-  <h1>Login</h1>
+<%- include('_layout', { title: 'Login', page: 'login' }) %>
   <% if (locals.error) { %>
-    <p style="color:red"><%= error %></p>
+    <div class="error-strip"><%= error %></div>
   <% } %>
-  <form method="POST">
-    <p><input name="username" placeholder="Username" autocomplete="username" required></p>
-    <p><input name="password" type="password" placeholder="Password" autocomplete="current-password" required></p>
-    <p><button>Log in</button></p>
-  </form>
-  <p><a href="/register">Register</a></p>
-</body>
-</html>
+  <div style="display:flex;justify-content:center;padding-top:80px">
+    <div class="card" style="width:100%;max-width:360px">
+      <h1 style="font-size:var(--font-2xl);margin-bottom:var(--space-lg);text-align:center">abs</h1>
+      <form method="POST">
+        <div style="margin-bottom:var(--space-md)">
+          <input name="username" placeholder="Username" autocomplete="username" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <div style="margin-bottom:var(--space-lg)">
+          <input name="password" type="password" placeholder="Password" autocomplete="current-password" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <button class="btn btn-primary" style="width:100%">Log in</button>
+      </form>
+      <p style="text-align:center;margin-top:var(--space-md);font-size:var(--font-sm)">
+        <a href="/register">Create an account</a>
+      </p>
+    </div>
+  </div>
+<%- include('_layout_close') %>

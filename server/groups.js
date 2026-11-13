@@ -40,7 +40,10 @@ module.exports = async function (fastify, opts) {
       'SELECT * FROM memberships WHERE group_id = ? AND user_id = ?'
     ).get(req.params.id, req.session.userId);
     if (!membership) {
-      return reply.view('group', { session: req.session, group, membership: null, members: [], pendingRequests: [], isMember: false });
+      const pendingInviteCount = fastify.db.prepare(
+        "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'invited'"
+      ).get(req.session.userId).cnt;
+      return reply.view('group', { session: req.session, group, membership: null, members: [], pendingRequests: [], isMember: false, pendingInviteCount });
     }
 
     let members = [];
@@ -64,7 +67,11 @@ module.exports = async function (fastify, opts) {
       SELECT code, expires_at FROM invites WHERE group_id = ? AND expires_at > ?
     `).all(req.params.id, Date.now());
 
-    return reply.view('group', { session: req.session, group, membership, members, pendingRequests, inviteLinks, isMember: true, error: req.query.error || null });
+    const pendingInviteCount = fastify.db.prepare(
+      "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'invited'"
+    ).get(req.session.userId).cnt;
+
+    return reply.view('group', { session: req.session, group, membership, members, pendingRequests, inviteLinks, isMember: true, pendingInviteCount, error: req.query.error || null });
   });
 
   fastify.post('/group/:id/invite', async (req, reply) => {

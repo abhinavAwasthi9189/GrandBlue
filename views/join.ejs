@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - Join Group</title>
-</head>
-<body>
-  <h1>Join Group</h1>
+<%- include('_layout', { title: 'Join Group', page: 'groups' }) %>
   <% if (locals.error) { %>
-    <p style="color:red"><%= error %></p>
+    <div class="error-strip"><%= error %></div>
   <% } %>
   <% if (locals.success) { %>
-    <p style="color:green"><%= success %></p>
-    <p><a href="/group/<%= group_id %>">View group</a></p>
+    <div class="card" style="max-width:400px;margin:40px auto;text-align:center">
+      <p style="color:var(--success);font-weight:600;margin-bottom:var(--space-md)"><%= success %></p>
+      <a href="/group/<%= group_id %>" class="btn btn-primary">View group</a>
+    </div>
   <% } %>
-  <p><a href="/">Back to home</a></p>
-</body>
-</html>
+<%- include('_layout_close') %>

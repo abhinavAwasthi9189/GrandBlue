@@ -11,40 +11,40 @@ function formatDur(ms) {
 %><!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - <%= group.name %> history</title>
-</head>
-<body>
-  <h1><%= group.name %> — study history</h1>
-  <p><a href="/group/<%= group.id %>">Back to group</a></p>
+<%- include('_layout', { title: group.name + ' history', page: 'groups', wide: true }) %>
+  <div style="display:flex;align-items:center;gap:var(--space-md);margin-bottom:var(--space-lg)">
+    <a href="/group/<%= group.id %>" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
+    <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %> — Study history</h1>
+  </div>
 
   <% if (members.length === 0) { %>
-    <p><em>No members in this group.</em></p>
+    <div class="empty-state"><div class="empty-state-text">No members in this group.</div></div>
   <% } else { %>
-    <table border="1" cellpadding="4">
-      <tr><th>Week (Mon–Sun, IST)</th>
-        <% members.forEach(function(name) { %><th><%= name %></th><% }); %>
-      </tr>
-      <% weeks.forEach(function(w) { %>
-        <tr>
-          <td><%= w.label %></td>
-          <% w.totals.forEach(function(t) { %>
-            <td><%= formatDur(t.total_ms) %></td>
-          <% }); %>
+    <div class="card" style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:var(--font-sm)">
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Week</th>
+          <% members.forEach(function(name) { %><th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600"><%= name %></th><% }); %>
         </tr>
-      <% }); %>
-    </table>
+        <% weeks.forEach(function(w) { %>
+          <tr style="border-bottom:1px solid var(--border-light)">
+            <td style="padding:var(--space-sm) var(--space-md)"><%= w.label %></td>
+            <% w.totals.forEach(function(t) { %>
+              <td style="text-align:right;padding:var(--space-sm) var(--space-md);font-family:var(--font-mono)"><%= formatDur(t.total_ms) %></td>
+            <% }); %>
+          </tr>
+        <% }); %>
+      </table>
+    </div>
 
-    <p style="margin-top:12px">
+    <div style="display:flex;justify-content:center;gap:var(--space-md);margin-top:var(--space-lg)">
       <% if (page > 0) { %>
-        <a href="/group/<%= group.id %>/history?page=<%= page - 1 %>">‹ Newer weeks</a>
+        <a href="/group/<%= group.id %>/history?page=<%= page - 1 %>" class="btn btn-sm btn-secondary">‹ Newer weeks</a>
       <% } else { %>
-        <span style="color:#999">‹ Newer weeks</span>
+        <span class="btn btn-sm btn-secondary" style="opacity:0.4;cursor:default">‹ Newer weeks</span>
       <% } %>
-      &nbsp;|&nbsp;
-      <a href="/group/<%= group.id %>/history?page=<%= page + 1 %>">Older weeks ›</a>
-    </p>
-    <p><em>Weeks run Monday 00:00 to Sunday 23:59 IST. Sessions crossing a week boundary are split.</em></p>
+      <a href="/group/<%= group.id %>/history?page=<%= page + 1 %>" class="btn btn-sm btn-secondary">Older weeks ›</a>
+    </div>
+    <p style="text-align:center;margin-top:var(--space-md);font-size:var(--font-sm);color:var(--text-tertiary)">Weeks run Monday 00:00 to Sunday 23:59 IST.</p>
   <% } %>
-</body>
-</html>
+<%- include('_layout_close') %>

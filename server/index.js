@@ -21,10 +21,14 @@ const fastify = Fastify({
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/cookie'));
 
-const staticDir = path.join(__dirname, '..', 'web', 'dist');
-if (require('fs').existsSync(staticDir)) {
+// Serve static files from both web/dist and public/
+const staticDirs = [
+  path.join(__dirname, '..', 'web', 'dist'),
+  path.join(__dirname, '..', 'public'),
+].filter(d => require('fs').existsSync(d));
+if (staticDirs.length > 0) {
   fastify.register(require('@fastify/static'), {
-    root: staticDir,
+    root: staticDirs,
     prefix: '/',
     wildcard: false,
   });
@@ -32,7 +36,11 @@ if (require('fs').existsSync(staticDir)) {
 
 const { Signer } = require('@fastify/cookie');
 const sessionPlugin = require('@fastify/session');
-const SESSION_SECRET = process.env.SESSION_SECRET || 'abs-dev-secret-change-in-prod-32chars!!';
+if (!process.env.SESSION_SECRET) {
+  console.error('FATAL: SESSION_SECRET must be set in .env or environment');
+  process.exit(1);
+}
+const SESSION_SECRET = process.env.SESSION_SECRET;
 const sessionStore = new sessionPlugin.Store();
 const cookieSigner = new Signer(SESSION_SECRET, 'sha256');
 
@@ -50,11 +58,20 @@ fastify.register(require('@fastify/view'), {
 
 fastify.decorate('db', require('./db'));
 
+// Add pending invite count to all authenticated views
+fastify.addHook('onSend', (request, reply, payload, done) => {
+  if (reply.context && reply.context.config && reply.context.config.url && request.session && request.session.userId) {
+    // We can't modify payload here easily; instead we inject via template locals
+  }
+  done();
+});
+
 fastify.register(require('./auth'));
 fastify.register(require('./groups'));
 fastify.register(require('./study'), { sessionStore, cookieSigner });
 fastify.register(require('./history'));
 fastify.register(require('./push'));
+fastify.register(require('./leetwars'));
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
@@ -78,7 +95,15 @@ fastify.get('/', async (req, reply) => {
     WHERE m.user_id = ? AND m.status = 'requested'
   `).all(req.session.userId);
 
-  return reply.view('home', { session: req.session, myGroups, pendingInvites, pendingRequests, error: req.query.error || null });
+  const user = fastify.db.prepare('SELECT leetcode_username FROM users WHERE id = ?').get(req.session.userId);
+  const hasLeetcode = !!user.leetcode_username;
+
+  return reply.view('home', { session: req.session, myGroups, pendingInvites, pendingRequests, hasLeetcode, error: req.query.error || null });
+});
+
+fastify.get('/you', async (req, reply) => {
+  if (!req.session.userId) return reply.redirect('/login');
+  return reply.view('you', { session: req.session });
 });
 
 async function start() {

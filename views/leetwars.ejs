@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('_layout', { title: 'Leetwars' + (group ? ' - ' + group.name : ''), page: 'groups', wide: true }) %>
+  <div style="display:flex;align-items:center;gap:var(--space-md);margin-bottom:var(--space-lg)">
+    <% if (group) { %>
+      <a href="/group/<%= group.id %>" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %> — Leetwars</h1>
+    <% } else { %>
+      <a href="/" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700">Leetwars</h1>
+    <% } %>
+  </div>
+
+  <% if (!hasLeetcode) { %>
+    <div class="card" style="max-width:400px;margin:0 auto">
+      <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Link your LeetCode account</h2>
+      <p style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-md)">Enter your LeetCode username to see your solved problems and compete on the weekly leaderboard.</p>
+      <form id="lc-form">
+        <div style="margin-bottom:var(--space-md)">
+          <input id="lc-input" name="leetcode_username" placeholder="LeetCode username" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <button class="btn btn-primary" style="width:100%" type="submit">Link account</button>
+        <span id="lc-msg" style="font-size:var(--font-sm);display:block;text-align:center;margin-top:var(--space-sm)"></span>
+      </form>
+    </div>
+    <div class="empty-state" style="margin-top:var(--space-lg)"><div class="empty-state-text">Leaderboard hidden until you link an account.</div></div>
+  <% } else { %>
+    <div class="card" style="margin-bottom:var(--space-md)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>LeetCode: <strong><%= leetcodeUsername %></strong></div>
+        <div style="display:flex;gap:var(--space-sm)">
+          <button id="change-btn" class="btn btn-sm btn-secondary" type="button">Change</button>
+          <button id="unlink-btn" class="btn btn-sm btn-danger" type="button">Unlink</button>
+        </div>
+      </div>
+      <span id="lc-msg" style="font-size:var(--font-sm);color:var(--text-secondary)"></span>
+      <form id="lc-form" style="display:none;margin-top:var(--space-md)">
+        <div style="display:flex;gap:var(--space-sm)">
+          <input id="lc-input" name="leetcode_username" value="<%= leetcodeUsername %>" placeholder="LeetCode username" required
+            style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+          <button class="btn btn-sm btn-primary" type="submit">Save</button>
+        </div>
+        <span id="lc-edit-msg" style="font-size:var(--font-sm)"></span>
+      </form>
+    </div>
+
+    <p style="font-size:var(--font-sm);color:var(--text-tertiary);margin-bottom:var(--space-md)">Polled every 20 minutes. New solves appear in the next cycle.</p>
+
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Weekly leaderboard</h2>
+    <% if (leaderboard.length === 0) { %>
+      <div class="empty-state"><div class="empty-state-text">No members yet.</div></div>
+    <% } else { %>
+      <div class="card" style="overflow-x:auto;padding:0">
+        <table style="width:100%;border-collapse:collapse;font-size:var(--font-sm)">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">#</th>
+            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Username</th>
+            <th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600">XP</th>
+            <th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600">Solved</th>
+            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Problems</th>
+          </tr>
+          <% leaderboard.forEach(function(e, i) { %>
+            <tr style="border-bottom:1px solid var(--border-light)">
+              <td style="padding:var(--space-sm) var(--space-md)"><%= i + 1 %></td>
+              <td style="padding:var(--space-sm) var(--space-md)"><%= e.username %></td>
+              <td style="padding:var(--space-sm) var(--space-md);text-align:right;font-family:var(--font-mono)"><%= e.xp %></td>
+              <td style="padding:var(--space-sm) var(--space-md);text-align:right"><%= e.solved_count %></td>
+              <td style="padding:var(--space-sm) var(--space-md)">
+                <% var solves = solvesMap[e.id] || []; %>
+                <% if (solves.length === 0) { %><span class="text-secondary"><em>none</em></span><% } else { %>
+                  <% solves.forEach(function(s) { %>
+                    <a href="https://leetcode.com/problems/<%= s.slug %>/" target="_blank" style="white-space:nowrap"><%= s.slug %></a> <span class="chip" style="font-size:10px;padding:1px 5px"><%= s.difficulty %></span><br>
+                  <% }); %>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </table>
+      </div>
+    <% } %>
+
+    <% if (quota > 0) { %>
+      <h2 style="font-size:var(--font-lg);font-weight:600;margin:var(--space-lg) 0 var(--space-md)">Behind on quota</h2>
+      <% if (behind.length === 0) { %>
+        <div class="empty-state"><div class="empty-state-text">Everyone meets the quota of <%= quota %> problems.</div></div>
+      <% } else { %>
+        <% behind.forEach(function(b) { %>
+          <div class="list-row">
+            <div class="row-main">
+              <div class="row-label"><%= b.username %></div>
+              <div class="row-sub">
+                <% if (b.notLinked) { %>
+                  <em>not linked</em>, <strong><%= b.owed %></strong> behind
+                <% } else { %>
+                  <%= b.solved %>/<%= b.solved + b.owed %> solved, <strong><%= b.owed %></strong> behind
+                <% } %>
+              </div>
+            </div>
+          </div>
+        <% }); %>
+      <% } %>
+    <% } else { %>
+      <p style="margin-top:var(--space-lg);font-size:var(--font-sm);color:var(--text-tertiary)">No weekly quota set. An admin can set one in Settings.</p>
+    <% } %>
+  <% } %>
+
+  <script>
+    (function() {
+      var form = document.getElementById('lc-form');
+      var input = document.getElementById('lc-input');
+      var msgEl = document.getElementById('lc-msg');
+      var unlinkBtn = document.getElementById('unlink-btn');
+      var changeBtn = document.getElementById('change-btn');
+
+      function onSubmit(e) {
+        e.preventDefault();
+        var val = input.value.trim();
+        if (!val) return;
+        msgEl.style.color = '';
+        msgEl.textContent = 'Checking...';
+        fetch('/profile/leetcode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leetcode_username: val }),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.ok) {
+            msgEl.style.color = 'var(--success)';
+            msgEl.textContent = 'Saved! Reloading...';
+            setTimeout(function() { location.reload(); }, 1000);
+          } else {
+            msgEl.style.color = 'var(--danger)';
+            msgEl.textContent = d.error || 'Error';
+            setTimeout(function() { msgEl.textContent = ''; }, 5000);
+          }
+        }).catch(function() {
+          msgEl.style.color = 'var(--danger)';
+          msgEl.textContent = 'Network error';
+        });
+      }
+
+      if (form) form.addEventListener('submit', onSubmit);
+
+      if (changeBtn) {
+        changeBtn.addEventListener('click', function() {
+          form.style.display = '';
+          changeBtn.style.display = 'none';
+        });
+      }
+
+      if (unlinkBtn) {
+        unlinkBtn.addEventListener('click', function() {
+          fetch('/profile/leetcode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leetcode_username: '' }),
+          }).then(function(r) { return r.json(); }).then(function(d) {
+            if (d.ok) { location.reload(); }
+          });
+        });
+      }
+    })();
+  </script>
+<%- include('_layout_close') %>

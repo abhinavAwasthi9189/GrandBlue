@@ -1,0 +1,58 @@
+<%- include('_head') %>
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/app.css">
+<title>abs<%= typeof title !== 'undefined' ? ' - ' + title : '' %></title>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar (desktop) -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">abs</div>
+    <div class="sidebar-nav">
+      <a href="/" class="<%= page === 'groups' ? 'active' : '' %>">
+        <span class="nav-icon">⊞</span> Groups
+        <% if (typeof pendingInviteCount !== 'undefined' && pendingInviteCount > 0) { %>
+          <span class="tab-badge" style="position:static;margin-left:auto"><%= pendingInviteCount %></span>
+        <% } %>
+      </a>
+      <a href="/you" class="<%= page === 'you' ? 'active' : '' %>">
+        <span class="nav-icon">⊙</span> You
+      </a>
+    </div>
+    <!-- Mini timer bar (sidebar bottom) -->
+    <div class="mini-timer" id="mini-timer">
+      <span class="mini-timer-time" id="mini-timer-time">00:00:00</span>
+      <div class="mini-timer-actions">
+        <button class="btn btn-sm btn-secondary" id="mini-pause-btn">Pause</button>
+        <button class="btn btn-sm btn-danger" id="mini-stop-btn">Stop</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Tab Bar (mobile) -->
+  <nav class="tab-bar" id="tab-bar">
+    <a href="/" class="<%= page === 'groups' ? 'active' : '' %>">
+      <span class="tab-icon">⊞</span>
+      <span class="tab-label">Groups</span>
+      <% if (typeof pendingInviteCount !== 'undefined' && pendingInviteCount > 0) { %>
+        <span class="tab-badge"><%= pendingInviteCount %></span>
+      <% } %>
+    </a>
+    <a href="/you" class="<%= page === 'you' ? 'active' : '' %>">
+      <span class="tab-icon">⊙</span>
+      <span class="tab-label">You</span>
+    </a>
+  </nav>
+
+  <!-- Mini timer bar (mobile, above tab bar) -->
+  <div class="mini-timer" id="mini-timer-mobile">
+    <span class="mini-timer-time" id="mini-timer-time-mobile">00:00:00</span>
+    <div class="mini-timer-actions">
+      <button class="btn btn-sm btn-secondary" id="mini-pause-btn-mobile">Pause</button>
+      <button class="btn btn-sm btn-danger" id="mini-stop-btn-mobile">Stop</button>
+    </div>
+  </div>
+
+  <main class="app-main<%= typeof wide !== 'undefined' && wide ? ' wide' : '' %>">
+
+<% /* Page content goes here */ %>

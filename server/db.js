@@ -81,6 +81,16 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_nudges_cooldown ON nudges(from_user, to_user, group_id);
+
+  CREATE TABLE IF NOT EXISTS solved_problems (
+    user_id INTEGER NOT NULL,
+    slug TEXT NOT NULL,
+    difficulty TEXT NOT NULL CHECK(difficulty IN ('Easy', 'Medium', 'Hard')),
+    solved_at_ms INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_solved_problems_user_time ON solved_problems(user_id, solved_at_ms);
 `);
 
 module.exports = db;

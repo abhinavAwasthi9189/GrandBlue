@@ -1,0 +1,77 @@
+
+  </main>
+</div>
+
+<script>
+(function() {
+  var MINI_TIMER_MS = 1000;
+  var miniTimerEl = document.getElementById('mini-timer');
+  var miniTimerMobileEl = document.getElementById('mini-timer-mobile');
+  var miniTimeEl = document.getElementById('mini-timer-time');
+  var miniTimeMobileEl = document.getElementById('mini-timer-time-mobile');
+  var miniPauseBtn = document.getElementById('mini-pause-btn');
+  var miniStopBtn = document.getElementById('mini-stop-btn');
+  var miniPauseBtnMobile = document.getElementById('mini-pause-btn-mobile');
+  var miniStopBtnMobile = document.getElementById('mini-stop-btn-mobile');
+  var miniInterval = null;
+  var miniStartMs = null;
+  var miniGroupId = null;
+
+  function fmtTimer(ms) {
+    if (ms < 0) ms = 0;
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function updateMiniTimer() {
+    if (!miniStartMs) return;
+    var elapsed = Date.now() - miniStartMs;
+    var text = fmtTimer(elapsed);
+    if (miniTimeEl) miniTimeEl.textContent = text;
+    if (miniTimeMobileEl) miniTimeMobileEl.textContent = text;
+  }
+
+  function showMiniTimer(startMs, groupId) {
+    miniStartMs = startMs;
+    miniGroupId = groupId;
+    if (miniTimerEl) miniTimerEl.classList.add('active');
+    if (miniTimerMobileEl) miniTimerMobileEl.classList.add('active');
+    updateMiniTimer();
+    if (miniInterval) clearInterval(miniInterval);
+    miniInterval = setInterval(updateMiniTimer, MINI_TIMER_MS);
+
+    function goToGroup() { if (miniGroupId) window.location.href = '/group/' + miniGroupId; }
+    if (miniTimerEl) miniTimerEl.onclick = goToGroup;
+    if (miniTimerMobileEl) miniTimerMobileEl.onclick = goToGroup;
+  }
+
+  function hideMiniTimer() {
+    miniStartMs = null;
+    miniGroupId = null;
+    if (miniTimerEl) miniTimerEl.classList.remove('active');
+    if (miniTimerMobileEl) miniTimerMobileEl.classList.remove('active');
+    if (miniInterval) { clearInterval(miniInterval); miniInterval = null; }
+  }
+
+  function stopSession() {
+    if (!miniGroupId) return;
+    fetch('/group/' + miniGroupId + '/stop', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.ok) hideMiniTimer(); })
+      .catch(function() {});
+  }
+
+  if (miniPauseBtn) miniPauseBtn.addEventListener('click', function(e) { e.stopPropagation(); stopSession(); });
+  if (miniStopBtn) miniStopBtn.addEventListener('click', function(e) { e.stopPropagation(); stopSession(); });
+  if (miniPauseBtnMobile) miniPauseBtnMobile.addEventListener('click', function(e) { e.stopPropagation(); stopSession(); });
+  if (miniStopBtnMobile) miniStopBtnMobile.addEventListener('click', function(e) { e.stopPropagation(); stopSession(); });
+
+  // Expose for page scripts to call
+  window.absMiniTimer = { show: showMiniTimer, hide: hideMiniTimer, stop: stopSession };
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# STATUS — Build step 6 done + systemd service
+# STATUS — Build step 6 done + systemd service + UI step 1 (foundation)
 
 ## Run
 `node server/index.js` — listens on `0.0.0.0:3000` (or `$PORT`)
@@ -7,38 +7,38 @@ Set these env vars for push notifications:
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
 - Push/nudge silently no-ops (no error) when VAPID keys are missing, so the app works without them for testing.
 
-## Changes in step 6
+## Changes in UI step 1 (foundation)
 
-### Database
-- `push_subscriptions(id, user_id, endpoint, keys_json, created_at)` — unique endpoint per device
-- `nudges(id, from_user, to_user, group_id, created_at)` — indexed on `(from_user, to_user, group_id)` for cooldown lookups
+### New files
+- `public/css/tokens.css` — CSS custom properties for the design system (dark default, light via `prefers-color-scheme`). Covers colours, spacing, radii, font sizes, shadows, safe-area insets, sidebar/tab-bar dimensions.
+- `public/css/app.css` — shared component classes: `.card`, `.btn` (primary/secondary/danger/ghost), `.chip`, `.list-row`, `.avatar` (with colour-from-id support), `.dialog-overlay`/`.dialog-content` (bottom sheet + centred dialog), `.fab`, `.progress-bar`, `.empty-state`, `.toast`, and the layout shell (`.app-shell`, `.tab-bar`, `.sidebar`, `.mini-timer`).
+- `views/_layout.ejs` — shared EJS layout partial with:
+  - Left sidebar on screens ≥900px (Groups + You links)
+  - Bottom tab bar on mobile (Groups + You with badge)
+  - Mini timer bar (hidden by default, activated via `window.absMiniTimer.show()`)
+  - `_layout_close.ejs` — closes the shell, includes the mini timer JS that exposes `absMiniTimer` globally
+- `views/you.ejs` — placeholder for the You tab (step 2+)
 
-### New file: `server/push.js`
-- `GET /push/vapid-public-key` — returns the VAPID public key (no auth, used by the browser before subscribing)
-- `POST /push/subscribe` — saves a push subscription for the current user (auth required)
-- `POST /push/unsubscribe` — removes a subscription (auth required)
-- `POST /group/:id/nudge/:userId` — nudge endpoint: checks both users are active members, enforces 10-minute cooldown, logs the nudge, sends push to all target subscriptions, deletes subscriptions that return 404/410
+### Modified files
+- `server/index.js` — serves `public/` alongside `web/dist/` via `@fastify/static` with multiple root directories; added `GET /you` route
+- `server/groups.js` — passes `pendingInviteCount` to group templates for the badge
+- `server/history.js` — passes `pendingInviteCount` to history template
+- `server/leetwars.js` — passes `pendingInviteCount` to leetwars templates
+- `views/login.ejs` — uses `_layout` + `_layout_close`, redesigned as centred card with styled inputs
+- `views/register.ejs` — same treatment as login
+- `views/home.ejs` — uses layout, redesigned with list rows, FAB for create group, bottom sheets for create/join, badge on tab, styled user area
+- `views/group.ejs` — uses layout, redesigned with avatar circles (colour from user id hash), member rows, card-based invites/settings, styled timer/notif bar, top tabs
+- `views/history.ejs` — uses layout, redesigned with card table, styled pagination
+- `views/leetwars.ejs` — uses layout, redesigned with cards, styled table, inline chips
+- `views/create-group.ejs` — uses layout, centred card
+- `views/join.ejs` — uses layout, centred success card
 
-### Modified: `server/index.js`
-- Registers the `push.js` plugin
-
-### Modified: `server/db.js`
-- Creates `push_subscriptions` and `nudges` tables
-
-### Modified: `web/dist/sw.js`
-- Added `push` event handler: shows notification with generic "Time to study together" text, opens group page on click
-- Added `notificationclick` event handler: focuses existing window or opens new one
-
-### Modified: `views/group.ejs`
-- Notification section: status text + "Turn on notifications" button (only shows when permission is `default`)
-- Permission check on page load; `requestPermission()` only when button is tapped (iPhone requirement)
-- `GET /push/vapid-public-key` → subscribe with `applicationServerKey`
-- Nudge column in members table: button next to non-studying members
-- Nudge UI feedback: green "Nudged!" on success, red error message on failure/cooldown (clears after 4 s)
-- Nudge button is hidden while the member is studying (re-evaluated on each WS update + render call)
-
-### New dependency
-- `web-push` — used server-side to send push notifications with VAPID
+### How the new layout works
+- Every page inherits `<link>` to tokens.css + app.css via `_layout.ejs`
+- The bottom tab bar has two items: Groups (link to `/`) and You (link to `/you`)
+- A "mini timer bar" is hidden in the DOM and shown by calling `window.absMiniTimer.show(startMs, groupId)` when the user starts studying on the group page
+- Desktop (≥900px): sidebar replaces tab bar, content gets `margin-left: var(--sidebar-width)`
+- The badge on Groups tab shows pending invite count (passed as `pendingInviteCount` to each view)
 
 ## systemd service
 

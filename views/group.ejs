@@ -1,117 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - <%= group.name %></title>
-</head>
-<body>
-  <h1><%= group.name %></h1>
+<%- include('_layout', { title: group.name, page: 'groups', wide: true }) %>
+  <% if (locals.error) { %>
+    <div class="error-strip"><%= error %></div>
+  <% } %>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-lg)">
+    <div style="display:flex;align-items:center;gap:var(--space-md)">
+      <a href="/" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %></h1>
+    </div>
+    <% if (membership && membership.role === 'admin') { %>
+      <span class="chip chip-accent">Admin</span>
+    <% } %>
+  </div>
 
   <% if (!membership) { %>
-    <p>You are not a member of this group.</p>
-    <p><a href="/">Back to home</a></p>
+    <div class="empty-state"><div class="empty-state-text">You are not a member of this group.</div></div>
+    <p style="text-align:center;margin-top:var(--space-md)"><a href="/" class="btn btn-secondary">Back to home</a></p>
   <% } else { %>
-    <p>Your role: <strong><%= membership.role %></strong> | Status: <strong><%= membership.status %></strong></p>
-    <p>
-      <form method="POST" action="/group/<%= group.id %>/leave" style="display:inline">
-        <button>Leave group</button>
-      </form>
-      <a href="/">Home</a>
-    </p>
-
     <% if (membership.status === 'active') { %>
-      <p><a href="/group/<%= group.id %>/history">Study history (past weeks)</a></p>
 
-      <h2>Study timer</h2>
-      <p id="timer-status">Loading…</p>
-      <p>
-        <button id="start-btn" type="button">Start studying</button>
-        <button id="stop-btn" type="button" style="display:none">Stop</button>
-      </p>
-      <p><em>Session closes automatically after 3&nbsp;min without a heartbeat.</em></p>
+      <!-- Study timer + Notifications -->
+      <div class="card" style="margin-bottom:var(--space-md)">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div><span id="timer-status">Loading…</span></div>
+          <div style="display:flex;gap:var(--space-sm)">
+            <button id="start-btn" class="btn btn-primary btn-sm" type="button">Start studying</button>
+            <button id="stop-btn" class="btn btn-danger btn-sm" type="button" style="display:none">Stop</button>
+          </div>
+        </div>
+        <div style="margin-top:var(--space-sm);display:flex;align-items:center;gap:var(--space-md)">
+          <span id="notif-status" style="font-size:var(--font-sm);color:var(--text-tertiary)">Loading…</span>
+          <button id="notif-btn" class="btn btn-sm btn-secondary" type="button" style="display:none">Turn on notifications</button>
+        </div>
+      </div>
 
-      <h2>Notifications</h2>
-      <p id="notif-status" style="color:#999">Loading…</p>
-      <button id="notif-btn" type="button" style="display:none">Turn on notifications</button>
+      <!-- Top tabs -->
+      <div style="display:flex;gap:1px;margin-bottom:var(--space-lg);background:var(--bg-tertiary);border-radius:var(--radius-md);overflow:hidden">
+        <a href="/group/<%= group.id %>" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-card);padding:10px;text-decoration:none;font-weight:500">Members</a>
+        <a href="/group/<%= group.id %>/history" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Study</a>
+        <a href="/group/<%= group.id %>/leetwars" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Leetwars</a>
+      </div>
 
-      <h2>Members</h2>
-      <table border="1" cellpadding="4">
-        <tr><th>Username</th><th>Status</th><th>This week</th><th>Role</th><th>Nudge</th>
-          <% if (membership.role === 'admin') { %><th>Actions</th><% } %>
-        </tr>
+      <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Members</h2>
       <% members.forEach(function(m) { %>
-        <tr data-user="<%= m.userId %>">
-          <td><%= m.username %></td>
-          <td class="status"></td>
-          <td class="week"></td>
-          <td><%= m.role %></td>
-          <td>
-            <% if (m.userId !== session.userId) { %>
-              <button class="nudge-btn" data-user="<%= m.userId %>" type="button">Nudge</button>
-              <span class="nudge-msg" style="color:red;font-size:0.9em"></span>
-            <% } %>
-          </td>
-          <% if (membership.role === 'admin' && m.role !== 'admin') { %>
-            <td>
-              <form method="POST" action="/group/<%= group.id %>/remove/<%= m.userId %>" style="display:inline">
-                <button>Remove</button>
-              </form>
-            </td>
-          <% } else if (membership.role === 'admin') { %>
-            <td></td>
+        <div class="list-row" data-user="<%= m.userId %>">
+          <% var hash = 0; for (var i = 0; i < String(m.userId).length; i++) { hash = ((hash << 5) - hash) + String(m.userId).charCodeAt(i); hash |= 0; } %>
+          <% var hue = ((hash % 360) + 360) % 360; %>
+          <div class="avatar" style="background:hsl(<%= hue %>, 55%, 50%)"><%= m.username.charAt(0).toUpperCase() %></div>
+          <div class="row-main">
+            <div class="row-label"><%= m.username %> <% if (m.role === 'admin') { %><span class="chip chip-accent" style="font-size:10px;padding:1px 6px">Admin</span><% } %></div>
+            <div class="row-sub">
+              <span class="status"></span> · <span class="week"></span>
+            </div>
+          </div>
+          <% if (m.userId !== session.userId) { %>
+            <button class="nudge-btn btn btn-sm btn-secondary" data-user="<%= m.userId %>" type="button">Nudge</button>
+            <span class="nudge-msg" style="font-size:var(--font-sm);color:var(--danger)"></span>
           <% } %>
-        </tr>
+        </div>
       <% }); %>
-      </table>
-    <% } else { %>
-      <p><em>Waiting for admin approval.</em></p>
-    <% } %>
 
-    <% if (membership.role === 'admin' && membership.status === 'active') { %>
-      <% if (pendingRequests.length > 0) { %>
-        <h2>Pending requests</h2>
-        <ul>
-        <% pendingRequests.forEach(function(r) { %>
-          <li>
-            <strong><%= r.username %></strong>
-            <form method="POST" action="/group/<%= group.id %>/approve/<%= r.id %>" style="display:inline">
-              <button>Approve</button>
-            </form>
-            <form method="POST" action="/group/<%= group.id %>/reject/<%= r.id %>" style="display:inline">
-              <button>Reject</button>
-            </form>
-          </li>
-        <% }); %>
-        </ul>
+      <% if (membership.role === 'admin') { %>
+        <% if (pendingRequests.length > 0) { %>
+          <h2 style="font-size:var(--font-lg);font-weight:600;margin:var(--space-lg) 0 var(--space-md)">Join requests</h2>
+          <% pendingRequests.forEach(function(r) { %>
+            <div class="list-row">
+              <div class="row-main"><div class="row-label"><%= r.username %></div></div>
+              <form method="POST" action="/group/<%= group.id %>/approve/<%= r.id %>" style="display:inline"><button class="btn btn-sm btn-primary">Approve</button></form>
+              <form method="POST" action="/group/<%= group.id %>/reject/<%= r.id %>" style="display:inline"><button class="btn btn-sm btn-secondary">Reject</button></form>
+            </div>
+          <% }); %>
+        <% } %>
+
+        <div class="card" style="margin-top:var(--space-lg)">
+          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite by username</h3>
+          <form method="POST" action="/group/<%= group.id %>/invite" style="display:flex;gap:var(--space-sm)">
+            <input name="username" placeholder="Exact username" required
+              style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+            <button class="btn btn-sm btn-primary">Invite</button>
+          </form>
+        </div>
+
+        <div class="card" style="margin-top:var(--space-md)">
+          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite links</h3>
+          <p style="margin-bottom:var(--space-sm)"><a href="/invite-link/<%= group.id %>" class="btn btn-sm btn-secondary">Generate new link</a></p>
+          <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
+            <% inviteLinks.forEach(function(link) { %>
+              <div class="list-row" style="font-size:var(--font-sm)">
+                <code><%= link.code %></code>
+                <span class="text-secondary"><%= new Date(link.expires_at).toLocaleDateString() %></span>
+              </div>
+            <% }); %>
+          <% } %>
+        </div>
+
+        <div class="card" style="margin-top:var(--space-md);margin-bottom:var(--space-lg)">
+          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Settings</h3>
+          <form method="POST" action="/group/<%= group.id %>/settings">
+            <div style="margin-bottom:var(--space-md)">
+              <label style="font-size:var(--font-sm);color:var(--text-secondary);display:block;margin-bottom:var(--space-xs)">Weekly quota (problems)</label>
+              <input name="weekly_quota" type="number" value="<%= group.weekly_quota %>" min="0"
+                style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+            </div>
+            <button class="btn btn-primary">Save</button>
+          </form>
+        </div>
       <% } else { %>
-        <p><em>No pending requests.</em></p>
+        <div style="text-align:center;margin-top:var(--space-lg)">
+          <form method="POST" action="/group/<%= group.id %>/leave"><button class="btn btn-danger">Leave group</button></form>
+        </div>
       <% } %>
 
-      <h2>Invite by username</h2>
-      <form method="POST" action="/group/<%= group.id %>/invite">
-        <input name="username" placeholder="Exact username" required>
-        <button>Invite</button>
-      </form>
-
-      <h2>Invite links</h2>
-      <p><a href="/invite-link/<%= group.id %>">Generate new invite link</a></p>
-      <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
-        <ul>
-        <% inviteLinks.forEach(function(link) { %>
-          <li>Code: <code><%= link.code %></code> — <a href="/join/<%= link.code %>">/join/<%= link.code %></a> (expires <%= new Date(link.expires_at).toLocaleString() %>)</li>
-        <% }); %>
-        </ul>
-      <% } %>
-
-      <h2>Settings</h2>
-      <form method="POST" action="/group/<%= group.id %>/settings">
-        <p>Weekly quota (problems): <input name="weekly_quota" type="number" value="<%= group.weekly_quota %>" min="0"></p>
-        <p><button>Save</button></p>
-      </form>
-    <% } %>
-
-    <% if (locals.error) { %>
-      <p style="color:red"><%= error %></p>
+    <% } else { %>
+      <div class="empty-state"><div class="empty-state-text">Waiting for admin approval.</div></div>
     <% } %>
   <% } %>
 
@@ -154,7 +158,6 @@
               if (!d.ok) {
                 clearInterval(heartbeatTimer);
                 heartbeatTimer = null;
-                // server likely closed the session; rely on next WS update
               }
             })
             .catch(function() {});
@@ -178,23 +181,33 @@
         for (var i = 0; i < members.length; i++) {
           var m = members[i];
           if (m.userId === ME_ID) me = m;
-          var row = document.querySelector('tr[data-user="' + m.userId + '"]');
+          var row = document.querySelector('.list-row[data-user="' + m.userId + '"]');
           if (!row) continue;
           var statusEl = row.querySelector('.status');
           if (statusEl) statusEl.textContent = statusText(m);
           var weekEl = row.querySelector('.week');
           if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs);
           var nudgeBtn = row.querySelector('.nudge-btn');
-          if (nudgeBtn) nudgeBtn.style.display = m.studying ? 'none' : 'inline';
+          if (nudgeBtn) nudgeBtn.style.display = m.studying ? 'none' : 'inline-flex';
         }
         if (me) {
-          document.getElementById('timer-status').textContent = me.studying
-            ? 'You are studying. ' + fmtDur(Date.now() - me.startMs)
-            : 'Not studying.';
-          document.getElementById('start-btn').style.display = me.studying ? 'none' : 'inline';
-          document.getElementById('stop-btn').style.display = me.studying ? 'inline' : 'none';
+          var timerEl = document.getElementById('timer-status');
+          if (timerEl) timerEl.textContent = me.studying
+            ? 'Studying · ' + fmtDur(Date.now() - me.startMs)
+            : 'Not studying';
+          var startBtn = document.getElementById('start-btn');
+          var stopBtn = document.getElementById('stop-btn');
+          if (startBtn) startBtn.style.display = me.studying ? 'none' : 'inline-flex';
+          if (stopBtn) stopBtn.style.display = me.studying ? 'inline-flex' : 'none';
           if (me.studying && !heartbeatTimer) startHeartbeat();
           if (!me.studying && heartbeatTimer) stopHeartbeat();
+
+          // Mini timer bar
+          if (me.studying && window.absMiniTimer) {
+            window.absMiniTimer.show(me.startMs, GROUP_ID);
+          } else if (!me.studying && window.absMiniTimer) {
+            window.absMiniTimer.hide();
+          }
         }
       }
 
@@ -230,7 +243,6 @@
         fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
       });
 
-      // --- Nudge buttons ---
       document.querySelectorAll('.nudge-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var targetId = btn.getAttribute('data-user');
@@ -240,10 +252,10 @@
             .then(function(r) { return r.json(); })
             .then(function(d) {
               if (d.ok) {
-                msgEl.style.color = 'green';
+                msgEl.style.color = 'var(--success)';
                 msgEl.textContent = 'Nudged!';
               } else {
-                msgEl.style.color = 'red';
+                msgEl.style.color = 'var(--danger)';
                 msgEl.textContent = d.error || 'Failed';
               }
               setTimeout(function() { msgEl.textContent = ''; }, 4000);
@@ -252,7 +264,6 @@
         });
       });
 
-      // --- Notifications ---
       var notifStatus = document.getElementById('notif-status');
       var notifBtn = document.getElementById('notif-btn');
       var vapidAvailable = false;
@@ -264,21 +275,21 @@
           return;
         }
         if (!vapidAvailable) {
-          notifStatus.textContent = 'VAPID not configured on server (set VAPID_PUBLIC_KEY env)';
+          notifStatus.textContent = 'Push not configured';
           notifBtn.style.display = 'none';
           return;
         }
         if (Notification.permission === 'denied') {
-          notifStatus.textContent = 'Notifications blocked - enable in browser settings';
+          notifStatus.textContent = 'Notifications blocked';
           notifBtn.style.display = 'none';
         } else if (subscribed) {
           notifStatus.textContent = 'Notifications on';
           notifBtn.textContent = 'Resubscribe';
-          notifBtn.style.display = 'inline';
+          notifBtn.style.display = 'inline-flex';
         } else {
-          notifStatus.textContent = Notification.permission === 'granted' ? 'Notifications off (resubscribe below)' : 'Notifications off';
+          notifStatus.textContent = Notification.permission === 'granted' ? 'Notifications off' : 'Notifications off';
           notifBtn.textContent = 'Turn on notifications';
-          notifBtn.style.display = 'inline';
+          notifBtn.style.display = 'inline-flex';
         }
       }
 
@@ -308,25 +319,17 @@
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
-                }).then(function() {
-                  updateNotifUI(true);
-                }).catch(function() {
-                  notifStatus.textContent = 'Failed to save subscription';
-                });
-              }).catch(function(e) {
-                notifStatus.textContent = 'Subscription failed: ' + e.message;
-              });
+                }).then(function() { updateNotifUI(true); })
+                  .catch(function() { notifStatus.textContent = 'Failed to save subscription'; });
+              }).catch(function(e) { notifStatus.textContent = 'Subscription failed: ' + e.message; });
           });
         });
       }
 
-      // prime vapidAvailable on page load
       fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
         vapidAvailable = !!d.key;
         updateNotifUI(false);
-      }).catch(function() {
-        notifStatus.textContent = 'Could not check push config';
-      });
+      }).catch(function() { notifStatus.textContent = 'Could not check push config'; });
 
       setInterval(render, 1000);
       render();
@@ -334,5 +337,4 @@
     })();
   </script>
   <% } %>
-</body>
-</html>
+<%- include('_layout_close') %>

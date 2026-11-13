@@ -1,22 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <%- include('_head') %>
-  <title>abs - Register</title>
-</head>
-<body>
-  <h1>Register</h1>
+<%- include('_layout', { title: 'Register', page: 'register' }) %>
   <% if (locals.error) { %>
-    <p style="color:red"><%= error %></p>
+    <div class="error-strip"><%= error %></div>
   <% } %>
-  <form method="POST">
-    <% if (locals.signupCodeRequired) { %>
-      <p><input name="signup_code" placeholder="Signup code" required></p>
-    <% } %>
-    <p><input name="username" placeholder="Username" autocomplete="username" required></p>
-    <p><input name="password" type="password" placeholder="Password" autocomplete="new-password" required></p>
-    <p><button>Register</button></p>
-  </form>
-  <p><a href="/login">Log in</a></p>
-</body>
-</html>
+  <div style="display:flex;justify-content:center;padding-top:80px">
+    <div class="card" style="width:100%;max-width:360px">
+      <h1 style="font-size:var(--font-2xl);margin-bottom:var(--space-lg);text-align:center">abs</h1>
+      <form method="POST">
+        <% if (locals.signupCodeRequired) { %>
+          <div style="margin-bottom:var(--space-md)">
+            <input name="signup_code" placeholder="Signup code" required
+              style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+          </div>
+        <% } %>
+        <div style="margin-bottom:var(--space-md)">
+          <input name="username" placeholder="Username" autocomplete="username" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <div style="margin-bottom:var(--space-lg)">
+          <input name="password" type="password" placeholder="Password" autocomplete="new-password" required
+            style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+        </div>
+        <button class="btn btn-primary" style="width:100%">Register</button>
+      </form>
+      <p style="text-align:center;margin-top:var(--space-md);font-size:var(--font-sm)">
+        <a href="/login">Log in</a>
+      </p>
+    </div>
+  </div>
+<%- include('_layout_close') %>
