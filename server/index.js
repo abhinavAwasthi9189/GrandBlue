@@ -15,8 +15,15 @@ if (require('fs').existsSync(staticDir)) {
   });
 }
 
-fastify.register(require('@fastify/session'), {
-  secret: process.env.SESSION_SECRET || 'abs-dev-secret-change-in-prod-32chars!!',
+const { Signer } = require('@fastify/cookie');
+const sessionPlugin = require('@fastify/session');
+const SESSION_SECRET = process.env.SESSION_SECRET || 'abs-dev-secret-change-in-prod-32chars!!';
+const sessionStore = new sessionPlugin.Store();
+const cookieSigner = new Signer(SESSION_SECRET, 'sha256');
+
+fastify.register(sessionPlugin, {
+  secret: SESSION_SECRET,
+  store: sessionStore,
   cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
   saveUninitialized: false,
 });
@@ -30,6 +37,7 @@ fastify.decorate('db', require('./db'));
 
 fastify.register(require('./auth'));
 fastify.register(require('./groups'));
+fastify.register(require('./study'), { sessionStore, cookieSigner });
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');

@@ -29,6 +29,8 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(user_id, start_ms);
+
   CREATE TABLE IF NOT EXISTS groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

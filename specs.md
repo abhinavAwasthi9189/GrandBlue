@@ -54,9 +54,8 @@ Login/register, home (my groups + invites), create group, group page (live timer
 7. Leetwars polling, XP, leaderboard, quota list.
 8. Nightly SQLite backup to the other laptop.
 
-## Working rules for the coding agent
-- Make small changes and run the app or tests after each one.
-- Do not read or edit `.env`, shell rc files, or the database file directly.
-- Write plain, simple code. No new abstraction until it is needed twice.
-- After each build step, list what changed and how to check it by hand.
-- Ask before deleting files, changing the schema in a breaking way, or adding dependencies.
+## Project rules
+- Don't read or edit .env, shell rc files, or the database file directly.
+- Ask before breaking schema changes, deleting files, or adding dependencies.
+- After each build step, update STATUS.md and say how to check it by hand.
+

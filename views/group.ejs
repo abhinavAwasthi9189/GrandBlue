@@ -21,22 +21,32 @@
     </p>
 
     <% if (membership.status === 'active') { %>
+      <h2>Study timer</h2>
+      <p id="timer-status">Loading…</p>
+      <p>
+        <button id="start-btn" type="button">Start studying</button>
+        <button id="stop-btn" type="button" style="display:none">Stop</button>
+      </p>
+      <p><em>Session closes automatically after 3&nbsp;min without a heartbeat.</em></p>
+
       <h2>Members</h2>
       <table border="1" cellpadding="4">
-        <tr><th>Username</th><th>Role</th>
+        <tr><th>Username</th><th>Status</th><th>This week</th><th>Role</th>
           <% if (membership.role === 'admin') { %><th>Actions</th><% } %>
         </tr>
       <% members.forEach(function(m) { %>
-        <tr>
+        <tr data-user="<%= m.userId %>">
           <td><%= m.username %></td>
+          <td class="status"></td>
+          <td class="week"></td>
           <td><%= m.role %></td>
           <% if (membership.role === 'admin' && m.role !== 'admin') { %>
             <td>
-              <form method="POST" action="/group/<%= group.id %>/remove/<%= m.id %>" style="display:inline">
+              <form method="POST" action="/group/<%= group.id %>/remove/<%= m.userId %>" style="display:inline">
                 <button>Remove</button>
               </form>
             </td>
-          <% } else { %>
+          <% } else if (membership.role === 'admin') { %>
             <td></td>
           <% } %>
         </tr>
@@ -92,6 +102,126 @@
     <% if (locals.error) { %>
       <p style="color:red"><%= error %></p>
     <% } %>
+  <% } %>
+
+  <% if (membership && membership.status === 'active') { %>
+  <script>
+    (function() {
+      var GROUP_ID = <%= group.id %>;
+      var ME_ID = <%= session.userId %>;
+      var GROUP_PATH = '/group/' + GROUP_ID;
+      var members = <%- JSON.stringify(members).replace(/<\//g, '<\\/') %>;
+
+      function fmtDur(ms) {
+        if (ms < 0) ms = 0;
+        var s = Math.floor(ms / 1000);
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var sec = s % 60;
+        if (h > 0) return h + 'h ' + m + 'm ' + sec + 's';
+        if (m > 0) return m + 'm ' + sec + 's';
+        return sec + 's';
+      }
+
+      function fmtAgo(ms) {
+        if (ms == null) return 'never';
+        var s = Math.floor(ms / 1000);
+        if (s < 60) return s + 's ago';
+        var m = Math.floor(s / 60);
+        if (m < 60) return m + 'm ago';
+        return Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago';
+      }
+
+      var heartbeatTimer = null;
+
+      function startHeartbeat() {
+        if (heartbeatTimer) return;
+        heartbeatTimer = setInterval(function() {
+          fetch(GROUP_PATH + '/heartbeat', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (!d.ok) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+                // server likely closed the session; rely on next WS update
+              }
+            })
+            .catch(function() {});
+        }, 30000);
+      }
+
+      function stopHeartbeat() {
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
+      }
+
+      function statusText(m) {
+        if (m.studying) return 'Studying ' + fmtDur(Date.now() - m.startMs);
+        return 'Last studied ' + fmtAgo(m.lastEndMs == null ? null : Date.now() - m.lastEndMs);
+      }
+
+      function render() {
+        var me = null;
+        for (var i = 0; i < members.length; i++) {
+          var m = members[i];
+          if (m.userId === ME_ID) me = m;
+          var row = document.querySelector('tr[data-user="' + m.userId + '"]');
+          if (!row) continue;
+          var statusEl = row.querySelector('.status');
+          if (statusEl) statusEl.textContent = statusText(m);
+          var weekEl = row.querySelector('.week');
+          if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs);
+        }
+        if (me) {
+          document.getElementById('timer-status').textContent = me.studying
+            ? 'You are studying. ' + fmtDur(Date.now() - me.startMs)
+            : 'Not studying.';
+          document.getElementById('start-btn').style.display = me.studying ? 'none' : 'inline';
+          document.getElementById('stop-btn').style.display = me.studying ? 'inline' : 'none';
+          if (me.studying && !heartbeatTimer) startHeartbeat();
+          if (!me.studying && heartbeatTimer) stopHeartbeat();
+        }
+      }
+
+      function connect() {
+        var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        var ws = new WebSocket(proto + '://' + location.host + '/ws/group/' + GROUP_ID);
+        ws.onmessage = function(e) {
+          var msg = JSON.parse(e.data);
+          if (msg.type === 'state') {
+            members = msg.members;
+          } else if (msg.type === 'update') {
+            var found = false;
+            for (var i = 0; i < members.length; i++) {
+              if (members[i].userId === msg.member.userId) {
+                members[i] = msg.member;
+                found = true;
+                break;
+              }
+            }
+            if (!found) members.push(msg.member);
+          }
+          render();
+        };
+        ws.onclose = function() {
+          setTimeout(connect, 3000);
+        };
+      }
+
+      document.getElementById('start-btn').addEventListener('click', function() {
+        fetch(GROUP_PATH + '/start', { method: 'POST' }).catch(function() {});
+      });
+      document.getElementById('stop-btn').addEventListener('click', function() {
+        fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
+      });
+
+      setInterval(render, 1000);
+      render();
+      connect();
+    })();
+  </script>
   <% } %>
 </body>
 </html>

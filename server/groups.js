@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const studyState = require('./studyState');
 
 module.exports = async function (fastify, opts) {
   fastify.addHook('onRequest', async (req, reply) => {
@@ -44,11 +45,10 @@ module.exports = async function (fastify, opts) {
 
     let members = [];
     if (membership.status === 'active') {
-      members = fastify.db.prepare(`
-        SELECT u.id, u.username, m.role, m.status, m.created_at
-        FROM memberships m JOIN users u ON u.id = m.user_id
-        WHERE m.group_id = ? AND m.status = 'active' ORDER BY m.created_at
-      `).all(req.params.id);
+      members = studyState.getActiveMembers(fastify.db, req.params.id).map(m => ({
+        ...studyState.getMemberState(fastify.db, m.id),
+        role: m.role,
+      }));
     }
 
     let pendingRequests = [];
