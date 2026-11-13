@@ -1,4 +1,4 @@
-# STATUS — Build step 6 done
+# STATUS — Build step 6 done + systemd service
 
 ## Run
 `node server/index.js` — listens on `0.0.0.0:3000` (or `$PORT`)
@@ -39,6 +39,19 @@ Set these env vars for push notifications:
 
 ### New dependency
 - `web-push` — used server-side to send push notifications with VAPID
+
+## systemd service
+
+Service file at `/etc/systemd/system/abs.service`. Commands to install/enable/check:
+
+```bash
+sudo mv /tmp/abs.service /etc/systemd/system/abs.service       # install (needs sudo)
+sudo systemctl daemon-reload                                    # reload after install
+sudo systemctl enable abs                                       # enable on boot
+sudo systemctl start abs                                        # start now
+sudo systemctl status abs                                       # check status
+sudo journalctl -u abs -f                                       # follow logs
+```
 
 ## Known problems (unchanged)
 - Session cookie invalidated on server restart (dev secret changes). Set `SESSION_SECRET` env var.
