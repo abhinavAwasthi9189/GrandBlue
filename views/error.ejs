@@ -1,0 +1,8 @@
+<%- include('_layout', { title: 'Error', page: 'groups' }) %>
+<div class="empty-state" style="margin-top:80px">
+  <div class="empty-state-icon" style="font-size:3rem">!</div>
+  <div class="empty-state-title">Something went wrong</div>
+  <div class="empty-state-text" id="error-message"><%= typeof message !== 'undefined' ? message : 'An unexpected error occurred.' %></div>
+  <a href="/" class="btn btn-primary" style="margin-top:var(--space-xl)">Go home</a>
+</div>
+<%- include('_layout_close') %>

@@ -109,6 +109,34 @@ function startPoller(fastify) {
   setInterval(() => tick().catch(() => {}), POLL_INTERVAL_MS);
 }
 
+function getDailyLeetwars(db, groupId, weekStart) {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const members = db.prepare(`
+    SELECT u.id, u.username, u.leetcode_username
+    FROM memberships m JOIN users u ON u.id = m.user_id
+    WHERE m.group_id = ? AND m.status = 'active'
+    ORDER BY u.username
+  `).all(groupId);
+
+  const days = [];
+  for (let d = 0; d < 7; d++) {
+    const dayStart = weekStart + d * DAY_MS;
+    const dayEnd = dayStart + DAY_MS;
+    const label = new Date(dayStart + 5.5 * 60 * 60 * 1000).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short' });
+
+    const dayData = members.map(m => {
+      const solves = db.prepare(`
+        SELECT difficulty FROM solved_problems
+        WHERE user_id = ? AND solved_at_ms >= ? AND solved_at_ms < ?
+      `).all(m.id, dayStart, dayEnd);
+      const xp = solves.reduce((sum, s) => sum + (XP_MAP[s.difficulty] || 0), 0);
+      return { userId: m.id, username: m.username, xp, solves: solves.length };
+    });
+    days.push({ label, data: dayData });
+  }
+  return { days, members };
+}
+
 function getLeaderboard(db, groupId, weekStart, weekEnd) {
   return db.prepare(`
     SELECT u.id, u.username, u.leetcode_username,
@@ -229,6 +257,28 @@ module.exports = async function (fastify, opts) {
       hasLeetcode,
       leetcodeUsername,
     });
+  });
+
+  fastify.get('/api/group/:id/leetwars/daily', async (req, reply) => {
+    const groupId = Number(req.params.id);
+    const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId);
+    if (!group) return reply.code(404).send({ ok: false });
+    if (!isActiveMember(db, groupId, req.session.userId)) {
+      return reply.code(403).send({ ok: false, error: 'not a member' });
+    }
+
+    const raw = req.query.week;
+    let weekStart;
+    if (raw) {
+      const parsed = new Date(raw + 'T00:00:00+05:30');
+      if (isNaN(parsed.getTime())) return reply.code(400).send({ ok: false, error: 'invalid week' });
+      weekStart = parsed.getTime();
+    } else {
+      weekStart = getWeekStartIST();
+    }
+
+    const result = getDailyLeetwars(db, groupId, weekStart);
+    return reply.send({ ok: true, weekStart, days: result.days, members: result.members });
   });
 
   if (!fastify.leetwarsStarted) {

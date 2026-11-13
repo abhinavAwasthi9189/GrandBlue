@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('_layout', { title: group.name + ' Settings', page: 'groups', wide: true }) %>
+  <div class="header-bar" style="margin-bottom:var(--space-md)">
+    <div style="display:flex;align-items:center;gap:var(--space-md);min-width:0">
+      <a href="/group/<%= group.id %>" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= group.name %> settings</h1>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-md)">
+    <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Group settings</h3>
+    <form method="POST" action="/group/<%= group.id %>/settings">
+      <div style="margin-bottom:var(--space-md)">
+        <label style="font-size:var(--font-sm);color:var(--text-secondary);display:block;margin-bottom:var(--space-xs)">Group name</label>
+        <input name="name" value="<%= group.name %>" required
+          style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+      </div>
+      <div style="margin-bottom:var(--space-md)">
+        <label style="font-size:var(--font-sm);color:var(--text-secondary);display:block;margin-bottom:var(--space-xs)">Weekly quota (problems)</label>
+        <input name="weekly_quota" type="number" value="<%= group.weekly_quota %>" min="0"
+          style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+      </div>
+      <button class="btn btn-primary">Save</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-md)">
+    <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite by username</h3>
+    <form method="POST" action="/group/<%= group.id %>/invite" style="display:flex;gap:var(--space-sm)">
+      <input name="username" placeholder="Exact username" required
+        style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+      <button class="btn btn-sm btn-primary">Invite</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-md)">
+    <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite links</h3>
+    <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
+      <% inviteLinks.forEach(function(link) { %>
+        <div style="display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-sm);font-size:var(--font-sm)">
+          <code style="flex:1;padding:6px 10px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-family:var(--font-mono)"><%= link.code %></code>
+          <button class="btn btn-sm btn-ghost copy-code-btn" data-code="<%= link.code %>" type="button">Copy</button>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <p style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">No active invite links.</p>
+    <% } %>
+    <a href="/invite-link/<%= group.id %>" class="btn btn-sm btn-secondary">Generate new link</a>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-md)">
+    <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Danger zone</h3>
+    <button class="btn btn-danger" id="delete-group-btn" type="button">Delete group</button>
+  </div>
+
+  <!-- Delete confirmation -->
+  <div class="dialog-overlay" id="delete-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Delete group?</div>
+        <button class="dialog-close" id="delete-dialog-close">✕</button>
+      </div>
+      <p style="margin-bottom:var(--space-lg);color:var(--text-secondary);font-size:var(--font-sm)">This cannot be undone. All member data will be removed.</p>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="delete-dialog-cancel">Cancel</button>
+        <form method="POST" action="/group/<%= group.id %>/delete" style="flex:1">
+          <button class="btn btn-danger" style="width:100%">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var dd = document.getElementById('delete-dialog');
+      document.getElementById('delete-group-btn').addEventListener('click', function() { dd.style.display = 'flex'; });
+      document.getElementById('delete-dialog-close').addEventListener('click', function() { dd.style.display = 'none'; });
+      document.getElementById('delete-dialog-cancel').addEventListener('click', function() { dd.style.display = 'none'; });
+      dd.addEventListener('click', function(e) { if (e.target === dd) dd.style.display = 'none'; });
+
+      document.querySelectorAll('.copy-code-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var code = btn.getAttribute('data-code');
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(code).then(function() {
+              btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+            }).catch(function() {});
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+          }
+        });
+      });
+    })();
+  </script>
+<%- include('_layout_close') %>

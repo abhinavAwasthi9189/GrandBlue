@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Fastify = require('fastify');
+const studyState = require('./studyState');
 
 const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
@@ -58,44 +59,58 @@ fastify.register(require('@fastify/view'), {
 
 fastify.decorate('db', require('./db'));
 
-// Add pending invite count to all authenticated views
-fastify.addHook('onSend', (request, reply, payload, done) => {
-  if (reply.context && reply.context.config && reply.context.config.url && request.session && request.session.userId) {
-    // We can't modify payload here easily; instead we inject via template locals
-  }
-  done();
-});
-
 fastify.register(require('./auth'));
 fastify.register(require('./groups'));
 fastify.register(require('./study'), { sessionStore, cookieSigner });
 fastify.register(require('./history'));
 fastify.register(require('./push'));
 fastify.register(require('./leetwars'));
+fastify.register(require('./stats'));
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
 
-  const myGroups = fastify.db.prepare(`
+  const db = fastify.db;
+  const userId = req.session.userId;
+
+  const myGroups = db.prepare(`
     SELECT g.id, g.name, g.weekly_quota, g.created_at, m.role, m.status
     FROM memberships m JOIN groups g ON g.id = m.group_id
     WHERE m.user_id = ? AND m.status = 'active'
     ORDER BY g.name
-  `).all(req.session.userId);
+  `).all(userId).map(g => {
+    const activeMembers = db.prepare(
+      "SELECT COUNT(*) AS cnt FROM memberships WHERE group_id = ? AND status = 'active'"
+    ).get(g.id).cnt;
 
-  const pendingInvites = fastify.db.prepare(`
-    SELECT g.id, g.name, m.status, m.created_at
-    FROM memberships m JOIN groups g ON g.id = m.group_id
+    const studyingNow = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM sessions s
+      JOIN memberships m ON m.user_id = s.user_id AND m.group_id = ? AND m.status = 'active'
+      WHERE s.end_ms IS NULL
+    `).get(g.id).cnt;
+
+    const weekStart = studyState.getWeekStartIST();
+    const myWeekMs = studyState.weekTotalForUser(db, userId, weekStart);
+
+    return { ...g, memberCount: activeMembers, studyingNow, myWeekMs };
+  });
+
+  const pendingInvites = db.prepare(`
+    SELECT g.id, g.name, m.created_at, inviter.username AS invited_by
+    FROM memberships m
+    JOIN groups g ON g.id = m.group_id
+    JOIN memberships m2 ON m2.group_id = g.id AND m2.role = 'admin' AND m2.status = 'active'
+    JOIN users inviter ON inviter.id = m2.user_id
     WHERE m.user_id = ? AND m.status = 'invited'
-  `).all(req.session.userId);
+  `).all(userId);
 
-  const pendingRequests = fastify.db.prepare(`
+  const pendingRequests = db.prepare(`
     SELECT g.id, g.name, m.status, m.created_at
     FROM memberships m JOIN groups g ON g.id = m.group_id
     WHERE m.user_id = ? AND m.status = 'requested'
-  `).all(req.session.userId);
+  `).all(userId);
 
-  const user = fastify.db.prepare('SELECT leetcode_username FROM users WHERE id = ?').get(req.session.userId);
+  const user = db.prepare('SELECT leetcode_username FROM users WHERE id = ?').get(userId);
   const hasLeetcode = !!user.leetcode_username;
 
   return reply.view('home', { session: req.session, myGroups, pendingInvites, pendingRequests, hasLeetcode, error: req.query.error || null });
@@ -103,7 +118,49 @@ fastify.get('/', async (req, reply) => {
 
 fastify.get('/you', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
-  return reply.view('you', { session: req.session });
+  const db = fastify.db;
+  const userId = req.session.userId;
+  const user = db.prepare('SELECT id, username, leetcode_username FROM users WHERE id = ?').get(userId);
+  const membershipCount = db.prepare(
+    "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'active'"
+  ).get(userId).cnt;
+  const hasLeetcode = !!user.leetcode_username;
+  return reply.view('you', { session: req.session, username: user.username, membershipCount, hasLeetcode, leetcodeUsername: user.leetcode_username || '' });
+});
+
+fastify.get('/change-password', async (req, reply) => {
+  if (!req.session.userId) return reply.redirect('/login');
+  return reply.view('change-password', { session: req.session, error: null });
+});
+
+fastify.post('/change-password', async (req, reply) => {
+  if (!req.session.userId) return reply.redirect('/login');
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) {
+    return reply.view('change-password', { session: req.session, error: 'Both fields required' });
+  }
+  if (new_password.length < 4) {
+    return reply.view('change-password', { session: req.session, error: 'New password min 4 chars' });
+  }
+  const argon2 = require('argon2');
+  const user = fastify.db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+  const valid = await argon2.verify(user.password_hash, current_password);
+  if (!valid) {
+    return reply.view('change-password', { session: req.session, error: 'Current password is wrong' });
+  }
+  const hash = await argon2.hash(new_password);
+  fastify.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.session.userId);
+  return reply.view('change-password', { session: req.session, success: true });
+});
+
+fastify.setNotFoundHandler(async (req, reply) => {
+  return reply.view('404', { session: req.session || {} });
+});
+
+fastify.setErrorHandler(async (err, req, reply) => {
+  if (reply.statusCode === 404) return reply.view('404', { session: req.session || {} });
+  const message = process.env.NODE_ENV === 'production' ? 'An unexpected error occurred.' : err.message;
+  return reply.view('error', { session: req.session || {}, message });
 });
 
 async function start() {

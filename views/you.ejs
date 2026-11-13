@@ -2,6 +2,351 @@
 <html lang="en">
 <head>
 <%- include('_layout', { title: 'You', page: 'you', wide: true }) %>
-  <h1 style="font-size:var(--font-xl);font-weight:700;margin-bottom:var(--space-lg)">You</h1>
-  <div class="empty-state"><div class="empty-state-text">Your profile and stats will appear here.</div></div>
+<% var hash = 0; for (var i = 0; i < String(session.userId).length; i++) { hash = ((hash << 5) - hash) + String(session.userId).charCodeAt(i); hash |= 0; } %>
+<% var hue = ((hash % 360) + 360) % 360; %>
+<div id="you-page">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:var(--space-lg);margin-bottom:var(--space-xl);padding:var(--space-lg) 0">
+    <div class="avatar avatar-lg" style="background:hsl(<%= hue %>, 55%, 50%);width:64px;height:64px;font-size:var(--font-2xl)"><%= username.charAt(0).toUpperCase() %></div>
+    <div>
+      <div style="font-size:var(--font-xl);font-weight:700"><%= username %></div>
+      <div style="font-size:var(--font-sm);color:var(--text-secondary)">Member of <%= membershipCount %> group<%= membershipCount !== 1 ? 's' : '' %></div>
+    </div>
+  </div>
+
+  <div class="you-split">
+  <!-- Study section -->
+  <div class="card" style="margin-bottom:var(--space-lg)">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Study</h2>
+    <div class="you-stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-md);margin-bottom:var(--space-lg)">
+      <div><div style="font-size:var(--font-sm);color:var(--text-secondary)">Today</div><div class="stat-value" id="stat-today">—</div></div>
+      <div><div style="font-size:var(--font-sm);color:var(--text-secondary)">This week</div><div class="stat-value" id="stat-week">—</div></div>
+      <div><div style="font-size:var(--font-sm);color:var(--text-secondary)">Streak</div><div class="stat-value" id="stat-streak">—</div></div>
+      <div><div style="font-size:var(--font-sm);color:var(--text-secondary)">Best week</div><div class="stat-value" id="stat-best">—</div></div>
+    </div>
+    <div style="margin-bottom:var(--space-lg)">
+      <div style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">Last 8 weeks</div>
+      <canvas id="chart-8weeks" height="140"></canvas>
+    </div>
+    <div>
+      <div style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">Last 7 days</div>
+      <canvas id="chart-7days" height="140"></canvas>
+    </div>
+  </div>
+
+  <!-- LeetCode section -->
+  <div class="card" style="margin-bottom:var(--space-lg)">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">LeetCode</h2>
+    <% if (!hasLeetcode) { %>
+      <p style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-md)">
+        Link your LeetCode account to track solved problems, earn XP, and compete on the weekly leaderboard.
+      </p>
+      <form id="lc-form">
+        <div style="display:flex;gap:var(--space-sm)">
+          <input id="lc-input" name="leetcode_username" placeholder="LeetCode username" required
+            style="flex:1;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+          <button class="btn btn-primary" type="submit">Link</button>
+        </div>
+        <span id="lc-msg" style="font-size:var(--font-sm);margin-top:var(--space-sm);display:block"></span>
+      </form>
+    <% } else { %>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)">
+        <div>
+          <span class="chip chip-success" style="margin-right:var(--space-sm)">✓ Linked</span>
+          <strong id="lc-username"><%= leetcodeUsername %></strong>
+        </div>
+        <div style="display:flex;gap:var(--space-sm)">
+          <button class="btn btn-sm btn-secondary" id="lc-change-btn" type="button">Change</button>
+          <button class="btn btn-sm btn-danger" id="lc-unlink-btn" type="button">Unlink</button>
+        </div>
+      </div>
+      <form id="lc-form" style="display:none;margin-bottom:var(--space-md)">
+        <div style="display:flex;gap:var(--space-sm)">
+          <input id="lc-input" name="leetcode_username" value="<%= leetcodeUsername %>" placeholder="LeetCode username" required
+            style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+          <button class="btn btn-sm btn-primary" type="submit">Save</button>
+        </div>
+        <span id="lc-msg" style="font-size:var(--font-sm);margin-top:var(--space-sm);display:block"></span>
+      </form>
+
+      <div id="lc-stats">
+        <div style="display:flex;gap:var(--space-md);margin-bottom:var(--space-md)">
+          <div><span class="chip chip-accent" id="lc-easy">Easy 0</span></div>
+          <div><span class="chip chip-warning" id="lc-medium">Medium 0</span></div>
+          <div><span class="chip chip-danger" id="lc-hard">Hard 0</span></div>
+          <div style="margin-left:auto;font-family:var(--font-mono);font-weight:600" id="lc-xp">0 XP</div>
+        </div>
+        <div style="margin-bottom:var(--space-md)">
+          <div style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">Solves this week</div>
+          <canvas id="chart-lc-week" height="120"></canvas>
+        </div>
+        <div>
+          <div style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">Last 5 solves</div>
+          <div id="lc-recent"></div>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- Settings -->
+  <div class="card" style="margin-bottom:var(--space-xl)">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Settings</h2>
+    <div class="list-row">
+      <div class="row-main"><div class="row-label">Notifications</div><div class="row-sub" id="notif-status-text">Checking…</div></div>
+      <button class="btn btn-sm btn-secondary" id="notif-settings-btn" style="display:none">Enable</button>
+    </div>
+    <div class="list-row">
+      <div class="row-main"><div class="row-label">Install app</div><div class="row-sub">Add to Home Screen</div></div>
+      <button class="btn btn-sm btn-secondary" id="install-btn">Install</button>
+    </div>
+    <div class="list-row">
+      <div class="row-main"><div class="row-label">Change password</div></div>
+      <a href="/change-password" class="btn btn-sm btn-secondary">Change</a>
+    </div>
+    <div class="list-row">
+      <div class="row-main"><div class="row-label">Log out</div></div>
+      <a href="/logout" class="btn btn-sm btn-danger">Log out</a>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script src="/vendor/chart.umd.min.js"></script>
+<script>
+(function() {
+  var userId = <%= session.userId %>;
+
+  function fmtDur(ms) {
+    if (ms < 0) ms = 0;
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    if (h > 0) return h + 'h ' + m + 'm';
+    if (m > 0) return m + 'm ' + (s % 60) + 's';
+    return s + 's';
+  }
+
+  function fmtDays(d) { return d + (d === 1 ? ' day' : ' days'); }
+
+  // --- LeetCode form ---
+  var lcForm = document.getElementById('lc-form');
+  var lcInput = document.getElementById('lc-input');
+  var lcMsg = document.getElementById('lc-msg');
+
+  if (lcForm) {
+    lcForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var val = lcInput.value.trim();
+      if (!val) return;
+      if (lcMsg) { lcMsg.style.color = ''; lcMsg.textContent = 'Checking...'; }
+      fetch('/profile/leetcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leetcode_username: val }),
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) { location.reload(); }
+        else { if (lcMsg) { lcMsg.style.color = 'var(--danger)'; lcMsg.textContent = d.error || 'Error'; } }
+      }).catch(function() {
+        if (lcMsg) { lcMsg.style.color = 'var(--danger)'; lcMsg.textContent = 'Network error'; }
+      });
+    });
+  }
+
+  var changeBtn = document.getElementById('lc-change-btn');
+  if (changeBtn) {
+    changeBtn.addEventListener('click', function() { lcForm.style.display = ''; changeBtn.style.display = 'none'; });
+  }
+
+  var unlinkBtn = document.getElementById('lc-unlink-btn');
+  if (unlinkBtn) {
+    unlinkBtn.addEventListener('click', function() {
+      fetch('/profile/leetcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leetcode_username: '' }),
+      }).then(function(r) { return r.json(); }).then(function(d) { if (d.ok) location.reload(); });
+    });
+  }
+
+  // --- Fetch stats ---
+  fetch('/api/me/stats')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) throw new Error('API error');
+
+      document.getElementById('stat-today').textContent = fmtDur(d.today.totalMs);
+      document.getElementById('stat-week').textContent = fmtDur(d.thisWeek.totalMs);
+      document.getElementById('stat-streak').textContent = fmtDays(d.streak);
+      document.getElementById('stat-best').textContent = fmtDur(d.bestWeekMs);
+
+      // 8-week chart
+      var wkLabels = d.last8Weeks.map(function(w) {
+        var d2 = new Date(w.weekStart + 5.5 * 3600000);
+        return d2.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      });
+      var wkData = d.last8Weeks.map(function(w) { return Math.round(w.totalMs / 60000); });
+      new Chart(document.getElementById('chart-8weeks'), {
+        type: 'bar',
+        data: { labels: wkLabels, datasets: [{ data: wkData, backgroundColor: 'rgba(99,102,241,0.6)', borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#9898a8', font: { size: 10 } }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: '#9898a8', font: { size: 10 }, callback: function(v) { return v + 'm'; } }, grid: { color: '#2e2e3a' } }
+          }
+        }
+      });
+
+      // 7-day study chart
+      var dayLabels = d.last7Days.map(function(d2) { return d2.label; });
+      var dayData = d.last7Days.map(function(d2) { return Math.round(d2.totalMs / 60000); });
+      new Chart(document.getElementById('chart-7days'), {
+        type: 'bar',
+        data: { labels: dayLabels, datasets: [{ data: dayData, backgroundColor: 'rgba(99,102,241,0.6)', borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#9898a8', font: { size: 10 } }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: '#9898a8', font: { size: 10 }, callback: function(v) { return v + 'm'; } }, grid: { color: '#2e2e3a' } }
+          }
+        }
+      });
+
+      // LeetCode stats
+      if (d.leetcode) {
+        var lc = d.leetcode;
+        document.getElementById('lc-easy').textContent = 'Easy ' + lc.byDifficulty.Easy;
+        document.getElementById('lc-medium').textContent = 'Medium ' + lc.byDifficulty.Medium;
+        document.getElementById('lc-hard').textContent = 'Hard ' + lc.byDifficulty.Hard;
+        document.getElementById('lc-xp').textContent = lc.xpThisWeek + ' XP';
+
+        // LC 7-day chart
+        if (lc.weekSolves7) {
+          new Chart(document.getElementById('chart-lc-week'), {
+            type: 'bar',
+            data: {
+              labels: lc.weekSolves7.map(function(s) { return s.label; }),
+              datasets: [{
+                data: lc.weekSolves7.map(function(s) { return s.count; }),
+                backgroundColor: 'rgba(34,197,94,0.6)', borderRadius: 4
+              }]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: '#9898a8', font: { size: 10 } }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: '#9898a8', font: { size: 10 }, stepSize: 1 }, grid: { color: '#2e2e3a' } }
+              }
+            }
+          });
+        }
+
+        // Last 5 solves
+        var recentEl = document.getElementById('lc-recent');
+        if (lc.last5Solves.length === 0) {
+          recentEl.innerHTML = '<span class="text-secondary" style="font-size:var(--font-sm)">No solves this week yet.</span>';
+        } else {
+          recentEl.innerHTML = lc.last5Solves.map(function(s) {
+            var diffClass = s.difficulty === 'Easy' ? 'chip-accent' : s.difficulty === 'Medium' ? 'chip-warning' : 'chip-danger';
+            return '<div style="display:flex;align-items:center;gap:var(--space-sm);padding:4px 0;font-size:var(--font-sm)">' +
+              '<a href="https://leetcode.com/problems/' + s.slug + '/" target="_blank">' + s.slug + '</a>' +
+              ' <span class="chip ' + diffClass + '" style="font-size:10px;padding:1px 6px">' + s.difficulty + '</span>' +
+              '</div>';
+          }).join('');
+        }
+      }
+    })
+.catch(function() {
+      var els = ['stat-today', 'stat-week', 'stat-streak', 'stat-best'];
+      els.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = 'Error';
+      });
+    });
+
+  // --- Notifications in settings ---
+  var notifStatus = document.getElementById('notif-status-text');
+  var notifBtn = document.getElementById('notif-settings-btn');
+  var vapidOk = false;
+
+  fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+    vapidOk = !!d.key;
+    updateNotifUI();
+  }).catch(function() { notifStatus.textContent = 'Unavailable'; });
+
+  function updateNotifUI() {
+    if (!('Notification' in window)) { notifStatus.textContent = 'Not supported'; return; }
+    if (!vapidOk) { notifStatus.textContent = 'Push not configured'; return; }
+    if (Notification.permission === 'denied') {
+      notifStatus.textContent = 'Blocked — enable in browser settings';
+      notifBtn.style.display = 'none';
+    } else if (Notification.permission === 'granted') {
+      notifStatus.textContent = 'On';
+      notifBtn.textContent = 'Re-subscribe';
+      notifBtn.style.display = 'inline-flex';
+    } else {
+      notifStatus.textContent = 'Off';
+      notifBtn.textContent = 'Turn on';
+      notifBtn.style.display = 'inline-flex';
+    }
+  }
+
+  if (notifBtn) {
+    notifBtn.addEventListener('click', function() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (Notification.permission !== 'granted') {
+        Notification.requestPermission().then(function(p) { if (p === 'granted') subscribe(); updateNotifUI(); });
+      } else {
+        subscribe();
+      }
+    });
+  }
+
+  function subscribe() {
+    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+      fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+        if (!d.key) return;
+        var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
+        while (raw.length % 4) raw += '=';
+        var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+        reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
+          .then(function(sub) {
+            fetch('/push/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+            }).then(function() { updateNotifUI(); }).catch(function() {});
+          }).catch(function() {});
+      });
+    });
+  }
+
+  // --- Install prompt ---
+  var installBtn = document.getElementById('install-btn');
+  var deferredPrompt = null;
+  var installShown = localStorage.getItem('abs-install-shown');
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (installShown !== '1') { installBtn.style.display = 'inline-flex'; }
+    installBtn.onclick = function() {
+      installBtn.style.display = 'none';
+      localStorage.setItem('abs-install-shown', '1');
+      deferredPrompt.prompt();
+    };
+  });
+  var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isiOS) {
+    if (installShown !== '1') { installBtn.style.display = 'inline-flex'; }
+    installBtn.onclick = function() {
+      installBtn.style.display = 'none';
+      localStorage.setItem('abs-install-shown', '1');
+      alert('Tap Share → Add to Home Screen');
+    };
+  }
+})();
+</script>
 <%- include('_layout_close') %>

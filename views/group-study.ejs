@@ -1,0 +1,292 @@
+<%
+function formatDur(ms) {
+  ms = Math.max(0, ms);
+  var s = Math.floor(ms / 1000);
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m > 0) return m + 'm ' + (s % 60) + 's';
+  return s + 's';
+}
+function hueFromId(id) {
+  var hash = 0;
+  for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
+  return ((hash % 360) + 360) % 360;
+}
+%><!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('_layout', { title: group.name + ' Study', page: 'groups', wide: true }) %>
+  <div class="header-bar" style="margin-bottom:var(--space-md)">
+    <div style="display:flex;align-items:center;gap:var(--space-md);min-width:0">
+      <a href="/group/<%= group.id %>" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= group.name %></h1>
+    </div>
+  </div>
+
+  <!-- Top tabs -->
+  <div style="display:flex;gap:1px;margin-bottom:var(--space-lg);background:var(--bg-tertiary);border-radius:var(--radius-md);overflow:hidden">
+    <a href="/group/<%= group.id %>" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Members</a>
+    <a href="/group/<%= group.id %>/study" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-card);padding:10px;text-decoration:none;font-weight:500">Study</a>
+    <a href="/group/<%= group.id %>/leetwars" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Leetwars</a>
+  </div>
+
+  <!-- Week picker -->
+  <div class="card" style="margin-bottom:var(--space-lg);display:flex;align-items:center;justify-content:space-between">
+    <button class="btn btn-sm btn-ghost" id="prev-week" type="button" style="font-size:1.1rem">←</button>
+    <div style="text-align:center">
+      <div id="week-label" style="font-weight:600"></div>
+      <div style="font-size:var(--font-sm);color:var(--text-tertiary)">IST (Mon–Sun)</div>
+    </div>
+    <button class="btn btn-sm btn-ghost" id="next-week" type="button" style="font-size:1.1rem">→</button>
+  </div>
+
+  <div class="study-split">
+  <!-- Leaderboard -->
+  <div class="card" style="margin-bottom:var(--space-lg)">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Leaderboard</h2>
+    <div id="leaderboard-rows" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+      <div style="text-align:center;padding:var(--space-xl);color:var(--text-tertiary);font-size:var(--font-sm)">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Comparison chart -->
+  <div class="card" style="margin-bottom:var(--space-lg);height:calc(100vh - 420px);min-height:200px;max-height:600px;display:flex;flex-direction:column">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Daily comparison</h2>
+    <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);margin-bottom:var(--space-md)"></div>
+    <div style="flex:1;min-height:0;position:relative"><canvas id="study-chart"></canvas></div>
+  </div>
+
+  </div>
+
+  <!-- Past weeks -->
+  <div class="card">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Past weeks</h2>
+    <% if (historyWeeks.length === 0 || historyWeeks[0].totals.length === 0) { %>
+      <div class="empty-state"><div class="empty-state-text">No history yet.</div></div>
+    <% } else { %>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:var(--font-sm)">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Week</th>
+            <% allMembers.forEach(function(m) { %>
+              <th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600"><%= m.username %></th>
+            <% }); %>
+          </tr>
+          <% historyWeeks.forEach(function(w) { %>
+            <tr style="border-bottom:1px solid var(--border-light)">
+              <td style="padding:var(--space-sm) var(--space-md)"><%= w.label %></td>
+              <% w.totals.forEach(function(t) { %>
+                <td style="text-align:right;padding:var(--space-sm) var(--space-md);font-family:var(--font-mono)"><%= formatDur(t.total_ms) %></td>
+              <% }); %>
+            </tr>
+          <% }); %>
+        </table>
+      </div>
+    <% } %>
+  </div>
+
+<script src="/vendor/chart.umd.min.js"></script>
+<script>
+(function() {
+  var GROUP_ID = <%= group.id %>;
+  var ME_ID = <%= session.userId %>;
+
+  function hueFromId(id) {
+    var hash = 0;
+    for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
+    return ((hash % 360) + 360) % 360;
+  }
+
+  function fmtDur(ms) {
+    if (ms < 0) ms = 0;
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    if (h > 0) return h + 'h ' + m + 'm';
+    if (m > 0) return m + 'm ' + (s % 60) + 's';
+    return s + 's';
+  }
+
+  function fmtDayMinutes(mins) {
+    if (mins === 0) return '—';
+    if (mins < 60) return mins + 'm';
+    return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  }
+
+  function getMondayIST(ms) {
+    var offset = 5.5 * 3600000;
+    var ist = new Date(ms + offset);
+    var day = ist.getUTCDay();
+    var diff = (day === 0 ? -6 : 1 - day);
+    ist.setUTCDate(ist.getUTCDate() + diff);
+    ist.setUTCHours(0, 0, 0, 0);
+    return ist.getTime() - offset;
+  }
+
+  function weekLabel(weekStart) {
+    var opts = { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' };
+    var ms = new Date(weekStart);
+    var end = new Date(weekStart + 7 * 86400000 - 1);
+    return ms.toLocaleDateString('en-GB', opts) + ' – ' + end.toLocaleDateString('en-GB', opts);
+  }
+
+  // Week state
+  var currentWeekStart = getMondayIST(Date.now());
+  var weeklyData = null;
+  var chartInstance = null;
+
+  var loadError = null;
+
+  function loadWeek(weekStart) {
+    var param = 'week=' + new Date(weekStart).toISOString().slice(0, 10);
+    fetch('/api/group/' + GROUP_ID + '/study/daily?' + param)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.ok) { throw new Error('API error'); }
+        loadError = null;
+        weeklyData = d;
+        renderLeaderboard(d);
+        renderChart(d);
+        document.getElementById('week-label').textContent = weekLabel(weekStart);
+      })
+      .catch(function() {
+        loadError = true;
+        var container = document.getElementById('leaderboard-rows');
+        container.innerHTML = '<div style="text-align:center;padding:var(--space-xl);color:var(--text-tertiary);font-size:var(--font-sm)">Failed to load. <a href="javascript:location.reload()">Retry</a></div>';
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      });
+  }
+
+  function renderLeaderboard(d) {
+    // Compute per-member week totals from days
+    var totals = {};
+    d.members.forEach(function(m) { totals[m.userId] = 0; });
+    d.days.forEach(function(day) {
+      day.data.forEach(function(pt) { totals[pt.userId] += pt.minutes; });
+    });
+
+    var sorted = d.members.slice().sort(function(a, b) { return totals[b.userId] - totals[a.userId]; });
+    var leaderMs = sorted.length > 0 ? totals[sorted[0].userId] : 0;
+
+    var container = document.getElementById('leaderboard-rows');
+    container.innerHTML = '';
+    sorted.forEach(function(m, idx) {
+      var hue = hueFromId(m.userId);
+      var pct = leaderMs > 0 ? Math.round(totals[m.userId] / leaderMs * 100) : 0;
+      var isMe = m.userId === ME_ID;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) 0';
+      row.innerHTML =
+        '<span style="width:20px;text-align:center;font-weight:600;font-size:var(--font-sm);color:var(--text-secondary)">' + (idx + 1) + '</span>' +
+        '<div class="avatar avatar-sm" style="background:hsl(' + hue + ',55%,50%);width:28px;height:28px;font-size:11px">' + m.username.charAt(0).toUpperCase() + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:' + (isMe ? '700' : '500') + ';font-size:var(--font-sm)">' + m.username + (isMe ? ' <span style="color:var(--text-tertiary);font-weight:400">(you)</span>' : '') + '</div>' +
+          '<div style="background:var(--bg-tertiary);border-radius:var(--radius-full);height:6px;overflow:hidden;margin-top:4px">' +
+            '<div style="height:100%;border-radius:var(--radius-full);background:hsl(' + hue + ',55%,50%);width:' + pct + '%"></div>' +
+          '</div>' +
+        '</div>' +
+        '<span style="font-family:var(--font-mono);font-size:var(--font-sm);font-weight:600">' + fmtDayMinutes(totals[m.userId]) + '</span>';
+      container.appendChild(row);
+    });
+  }
+
+  function renderChart(d) {
+    var legendEl = document.getElementById('chart-legend');
+    legendEl.innerHTML = '';
+    var labels = d.days.map(function(day) { return day.label; });
+    var hidden = {};
+
+    d.members.forEach(function(m) {
+      var hue = hueFromId(m.userId);
+      var color = 'hsl(' + hue + ', 55%, 50%)';
+      var isMe = m.userId === ME_ID;
+      var vals = d.days.map(function(day) {
+        var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
+        return found.length ? found[0].minutes : 0;
+      });
+
+      // Legend toggle
+      var item = document.createElement('span');
+      item.className = 'chip';
+      item.style.cssText = 'cursor:pointer;transition:opacity 0.15s';
+      item.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:6px"></span>' + m.username;
+      item.dataset.userId = m.userId;
+      legendEl.appendChild(item);
+    });
+
+    // Build datasets
+    var datasets = d.members.map(function(m) {
+      var hue = hueFromId(m.userId);
+      var isMe = m.userId === ME_ID;
+      var vals = d.days.map(function(day) {
+        var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
+        return found.length ? found[0].minutes : 0;
+      });
+      return {
+        label: m.username,
+        data: vals,
+        borderColor: 'hsl(' + hue + ', 55%, 50%)',
+        backgroundColor: 'hsl(' + hue + ', 55%, 50%)',
+        borderWidth: isMe ? 4 : 2,
+        pointRadius: isMe ? 4 : 3,
+        pointHoverRadius: 6,
+        tension: 0.2,
+        fill: false,
+        userId: m.userId,
+      };
+    });
+
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(document.getElementById('study-chart'), {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) { return ctx.dataset.label + ': ' + ctx.parsed.y + 'm'; }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#9898a8', font: { size: 10 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#9898a8', font: { size: 10 }, callback: function(v) { return v + 'm'; } }, grid: { color: '#2e2e3a' } }
+        }
+      }
+    });
+
+    // Legend click toggles visibility
+    legendEl.querySelectorAll('.chip').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var uid = Number(item.dataset.userId);
+        var ds = chartInstance.data.datasets.filter(function(ds2) { return ds2.userId === uid; });
+        if (ds.length) {
+          ds[0].hidden = !ds[0].hidden;
+          item.style.opacity = ds[0].hidden ? '0.4' : '1';
+          chartInstance.update();
+        }
+      });
+    });
+  }
+
+  // Week navigation
+  document.getElementById('prev-week').addEventListener('click', function() {
+    currentWeekStart -= 7 * 86400000;
+    loadWeek(currentWeekStart);
+  });
+  document.getElementById('next-week').addEventListener('click', function() {
+    var next = currentWeekStart + 7 * 86400000;
+    if (next <= getMondayIST(Date.now())) {
+      currentWeekStart = next;
+      loadWeek(currentWeekStart);
+    }
+  });
+
+  // Initial load
+  loadWeek(currentWeekStart);
+})();
+</script>
+<%- include('_layout_close') %>

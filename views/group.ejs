@@ -6,66 +6,83 @@
     <div class="error-strip"><%= error %></div>
   <% } %>
 
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-lg)">
-    <div style="display:flex;align-items:center;gap:var(--space-md)">
-      <a href="/" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
-      <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %></h1>
+  <div class="header-bar" style="margin-bottom:var(--space-md)">
+    <div style="display:flex;align-items:center;gap:var(--space-md);min-width:0">
+      <a href="/" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= group.name %></h1>
     </div>
-    <% if (membership && membership.role === 'admin') { %>
-      <span class="chip chip-accent">Admin</span>
-    <% } %>
+    <div class="header-actions">
+      <% if (membership && membership.role === 'admin') { %>
+        <a href="/group/<%= group.id %>/settings" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)" title="Group settings">⚙</a>
+      <% } else if (membership) { %>
+        <button class="btn-back" id="leave-menu-btn" type="button" style="font-size:1.2rem;background:none;border:none;color:var(--text-secondary);cursor:pointer">⋯</button>
+      <% } %>
+    </div>
   </div>
 
   <% if (!membership) { %>
     <div class="empty-state"><div class="empty-state-text">You are not a member of this group.</div></div>
     <p style="text-align:center;margin-top:var(--space-md)"><a href="/" class="btn btn-secondary">Back to home</a></p>
+  <% } else if (membership.status !== 'active') { %>
+    <div class="empty-state"><div class="empty-state-text">Waiting for admin approval.</div></div>
   <% } else { %>
-    <% if (membership.status === 'active') { %>
 
-      <!-- Study timer + Notifications -->
-      <div class="card" style="margin-bottom:var(--space-md)">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div><span id="timer-status">Loading…</span></div>
-          <div style="display:flex;gap:var(--space-sm)">
-            <button id="start-btn" class="btn btn-primary btn-sm" type="button">Start studying</button>
-            <button id="stop-btn" class="btn btn-danger btn-sm" type="button" style="display:none">Stop</button>
-          </div>
-        </div>
-        <div style="margin-top:var(--space-sm);display:flex;align-items:center;gap:var(--space-md)">
-          <span id="notif-status" style="font-size:var(--font-sm);color:var(--text-tertiary)">Loading…</span>
-          <button id="notif-btn" class="btn btn-sm btn-secondary" type="button" style="display:none">Turn on notifications</button>
+    <!-- Start / Stop bar -->
+    <div class="card" style="margin-bottom:var(--space-md);display:flex;align-items:center;justify-content:space-between;gap:var(--space-md)">
+      <div>
+        <div id="timer-status" style="font-weight:600">Loading…</div>
+        <div id="timer-sub" style="font-size:var(--font-sm);color:var(--text-tertiary);margin-top:var(--space-xs)">
+          <span id="notif-status">Loading…</span>
+          <button id="notif-btn" class="btn btn-sm btn-ghost" type="button" style="display:none;font-size:inherit;color:var(--accent);padding:0">Turn on notifications</button>
         </div>
       </div>
-
-      <!-- Top tabs -->
-      <div style="display:flex;gap:1px;margin-bottom:var(--space-lg);background:var(--bg-tertiary);border-radius:var(--radius-md);overflow:hidden">
-        <a href="/group/<%= group.id %>" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-card);padding:10px;text-decoration:none;font-weight:500">Members</a>
-        <a href="/group/<%= group.id %>/history" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Study</a>
-        <a href="/group/<%= group.id %>/leetwars" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Leetwars</a>
+      <div style="display:flex;gap:var(--space-sm);flex-shrink:0">
+        <button id="start-btn" class="btn btn-primary" type="button">Start studying</button>
+        <button id="stop-btn" class="btn btn-danger" type="button" style="display:none">Stop</button>
       </div>
+    </div>
 
-      <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Members</h2>
+    <!-- Top tabs -->
+    <div style="display:flex;gap:1px;margin-bottom:var(--space-lg);background:var(--bg-tertiary);border-radius:var(--radius-md);overflow:hidden">
+      <a href="/group/<%= group.id %>" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-card);padding:10px;text-decoration:none;font-weight:500">Members</a>
+      <a href="/group/<%= group.id %>/study" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Study</a>
+      <a href="/group/<%= group.id %>/leetwars" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Leetwars</a>
+    </div>
+
+    <!-- Members tab content -->
+    <div id="members-tab">
       <% members.forEach(function(m) { %>
-        <div class="list-row" data-user="<%= m.userId %>">
-          <% var hash = 0; for (var i = 0; i < String(m.userId).length; i++) { hash = ((hash << 5) - hash) + String(m.userId).charCodeAt(i); hash |= 0; } %>
-          <% var hue = ((hash % 360) + 360) % 360; %>
+        <% var hash = 0; for (var i = 0; i < String(m.userId).length; i++) { hash = ((hash << 5) - hash) + String(m.userId).charCodeAt(i); hash |= 0; } %>
+        <% var hue = ((hash % 360) + 360) % 360; %>
+          <div class="list-row" data-user="<%= m.userId %>">
           <div class="avatar" style="background:hsl(<%= hue %>, 55%, 50%)"><%= m.username.charAt(0).toUpperCase() %></div>
           <div class="row-main">
-            <div class="row-label"><%= m.username %> <% if (m.role === 'admin') { %><span class="chip chip-accent" style="font-size:10px;padding:1px 6px">Admin</span><% } %></div>
+            <div class="row-label">
+              <%= m.username %>
+              <% if (m.role === 'admin') { %><span class="chip chip-accent" style="font-size:10px;padding:1px 6px">Admin</span><% } %>
+            </div>
             <div class="row-sub">
-              <span class="status"></span> · <span class="week"></span>
+              <span class="status"></span>
+              <span class="week" style="margin-left:var(--space-sm)"></span>
             </div>
           </div>
+          <span class="live-timer" style="display:none;font-family:var(--font-mono);font-weight:700;font-size:var(--font-base);color:var(--accent);white-space:nowrap;margin-right:var(--space-sm);min-width:70px;text-align:right"></span>
           <% if (m.userId !== session.userId) { %>
             <button class="nudge-btn btn btn-sm btn-secondary" data-user="<%= m.userId %>" type="button">Nudge</button>
             <span class="nudge-msg" style="font-size:var(--font-sm);color:var(--danger)"></span>
+            <% if (membership.role === 'admin' && m.role !== 'admin') { %>
+              <button class="btn btn-sm btn-ghost remove-member-btn" data-user="<%= m.userId %>" data-name="<%= m.username %>" type="button" style="color:var(--danger);font-size:var(--font-sm)">Remove</button>
+            <% } %>
           <% } %>
         </div>
       <% }); %>
+    </div>
 
-      <% if (membership.role === 'admin') { %>
-        <% if (pendingRequests.length > 0) { %>
-          <h2 style="font-size:var(--font-lg);font-weight:600;margin:var(--space-lg) 0 var(--space-md)">Join requests</h2>
+    <!-- Admin sections -->
+    <% if (membership.role === 'admin') { %>
+      <% if (pendingRequests.length > 0) { %>
+        <div style="margin-top:var(--space-lg)">
+          <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Join requests</h2>
           <% pendingRequests.forEach(function(r) { %>
             <div class="list-row">
               <div class="row-main"><div class="row-label"><%= r.username %></div></div>
@@ -73,51 +90,77 @@
               <form method="POST" action="/group/<%= group.id %>/reject/<%= r.id %>" style="display:inline"><button class="btn btn-sm btn-secondary">Reject</button></form>
             </div>
           <% }); %>
-        <% } %>
-
-        <div class="card" style="margin-top:var(--space-lg)">
-          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite by username</h3>
-          <form method="POST" action="/group/<%= group.id %>/invite" style="display:flex;gap:var(--space-sm)">
-            <input name="username" placeholder="Exact username" required
-              style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
-            <button class="btn btn-sm btn-primary">Invite</button>
-          </form>
-        </div>
-
-        <div class="card" style="margin-top:var(--space-md)">
-          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Invite links</h3>
-          <p style="margin-bottom:var(--space-sm)"><a href="/invite-link/<%= group.id %>" class="btn btn-sm btn-secondary">Generate new link</a></p>
-          <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
-            <% inviteLinks.forEach(function(link) { %>
-              <div class="list-row" style="font-size:var(--font-sm)">
-                <code><%= link.code %></code>
-                <span class="text-secondary"><%= new Date(link.expires_at).toLocaleDateString() %></span>
-              </div>
-            <% }); %>
-          <% } %>
-        </div>
-
-        <div class="card" style="margin-top:var(--space-md);margin-bottom:var(--space-lg)">
-          <h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-md)">Settings</h3>
-          <form method="POST" action="/group/<%= group.id %>/settings">
-            <div style="margin-bottom:var(--space-md)">
-              <label style="font-size:var(--font-sm);color:var(--text-secondary);display:block;margin-bottom:var(--space-xs)">Weekly quota (problems)</label>
-              <input name="weekly_quota" type="number" value="<%= group.weekly_quota %>" min="0"
-                style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
-            </div>
-            <button class="btn btn-primary">Save</button>
-          </form>
-        </div>
-      <% } else { %>
-        <div style="text-align:center;margin-top:var(--space-lg)">
-          <form method="POST" action="/group/<%= group.id %>/leave"><button class="btn btn-danger">Leave group</button></form>
         </div>
       <% } %>
 
+      <div style="margin-top:var(--space-lg)">
+        <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Invite</h2>
+        <form method="POST" action="/group/<%= group.id %>/invite" style="display:flex;gap:var(--space-sm);margin-bottom:var(--space-md)">
+          <input name="username" placeholder="Exact username" required
+            style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px">
+          <button class="btn btn-sm btn-primary">Invite</button>
+        </form>
+
+        <div class="card" style="margin-bottom:var(--space-md)">
+          <div style="font-size:var(--font-sm);font-weight:600;margin-bottom:var(--space-sm)">Invite link / code</div>
+          <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
+            <% inviteLinks.forEach(function(link) { %>
+              <div style="display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-sm);font-size:var(--font-sm)">
+                <code style="flex:1;padding:6px 10px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-family:var(--font-mono)"><%= link.code %></code>
+                <button class="btn btn-sm btn-ghost copy-code-btn" data-code="<%= link.code %>" type="button">Copy</button>
+              </div>
+            <% }); %>
+          <% } else { %>
+            <p style="font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:var(--space-sm)">No active invite links.</p>
+          <% } %>
+          <a href="/invite-link/<%= group.id %>" class="btn btn-sm btn-secondary">Generate new link</a>
+        </div>
+      </div>
+
+      <div style="margin-top:var(--space-lg);text-align:center">
+        <button class="btn btn-danger" id="leave-group-btn" type="button">Leave group</button>
+      </div>
     <% } else { %>
-      <div class="empty-state"><div class="empty-state-text">Waiting for admin approval.</div></div>
+      <div style="margin-top:var(--space-lg);text-align:center">
+        <button class="btn btn-danger" id="leave-group-btn" type="button">Leave group</button>
+      </div>
     <% } %>
+
   <% } %>
+
+  <!-- Leave confirmation dialog -->
+  <div class="dialog-overlay" id="leave-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Leave group?</div>
+        <button class="dialog-close" id="leave-dialog-close">✕</button>
+      </div>
+      <p style="margin-bottom:var(--space-lg);color:var(--text-secondary);font-size:var(--font-sm)">You won't be able to access this group's data after leaving.</p>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="leave-dialog-cancel">Cancel</button>
+        <form method="POST" action="/group/<%= group.id %>/leave" style="flex:1">
+          <button class="btn btn-danger" style="width:100%">Leave</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Remove member confirmation dialog -->
+  <div class="dialog-overlay" id="remove-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Remove member</div>
+        <button class="dialog-close" id="remove-dialog-close">✕</button>
+      </div>
+      <p style="margin-bottom:var(--space-lg);color:var(--text-secondary);font-size:var(--font-sm)">Remove <strong id="remove-name"></strong> from this group?</p>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="remove-dialog-cancel">Cancel</button>
+        <form method="POST" id="remove-form" style="flex:1">
+          <button class="btn btn-danger" style="width:100%">Remove</button>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <% if (membership && membership.status === 'active') { %>
   <script>
@@ -155,20 +198,14 @@
           fetch(GROUP_PATH + '/heartbeat', { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-              if (!d.ok) {
-                clearInterval(heartbeatTimer);
-                heartbeatTimer = null;
-              }
+              if (!d.ok) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
             })
             .catch(function() {});
         }, 30000);
       }
 
       function stopHeartbeat() {
-        if (heartbeatTimer) {
-          clearInterval(heartbeatTimer);
-          heartbeatTimer = null;
-        }
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       }
 
       function statusText(m) {
@@ -178,31 +215,58 @@
 
       function render() {
         var me = null;
+        var container = document.getElementById('members-tab');
+        var rows = Array.from(container.querySelectorAll('.list-row'));
+
+        // Sort: studying first, then by username
+        var sortedIds = members.slice().sort(function(a, b) {
+          if (a.studying && !b.studying) return -1;
+          if (!a.studying && b.studying) return 1;
+          return a.username < b.username ? -1 : 1;
+        }).map(function(m) { return m.userId; });
+
+        // Reorder DOM to match sorted order
+        var currentOrder = rows.map(function(r) { return Number(r.dataset.user); });
+        var needsReorder = false;
+        for (var si = 0; si < sortedIds.length; si++) {
+          if (currentOrder[si] !== sortedIds[si]) { needsReorder = true; break; }
+        }
+        if (needsReorder) {
+          sortedIds.forEach(function(id) {
+            var r = container.querySelector('[data-user="' + id + '"]');
+            if (r) container.appendChild(r);
+          });
+        }
+
         for (var i = 0; i < members.length; i++) {
           var m = members[i];
           if (m.userId === ME_ID) me = m;
-          var row = document.querySelector('.list-row[data-user="' + m.userId + '"]');
+          var row = document.querySelector('[data-user="' + m.userId + '"]');
           if (!row) continue;
           var statusEl = row.querySelector('.status');
           if (statusEl) statusEl.textContent = statusText(m);
           var weekEl = row.querySelector('.week');
-          if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs);
+          if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs) + ' this week';
           var nudgeBtn = row.querySelector('.nudge-btn');
           if (nudgeBtn) nudgeBtn.style.display = m.studying ? 'none' : 'inline-flex';
+          var timerEl = row.querySelector('.live-timer');
+          if (timerEl) {
+            if (m.studying) {
+              timerEl.style.display = 'inline';
+              timerEl.textContent = fmtDur(Date.now() - m.startMs);
+            } else {
+              timerEl.style.display = 'none';
+            }
+          }
         }
         if (me) {
-          var timerEl = document.getElementById('timer-status');
-          if (timerEl) timerEl.textContent = me.studying
+          document.getElementById('timer-status').textContent = me.studying
             ? 'Studying · ' + fmtDur(Date.now() - me.startMs)
             : 'Not studying';
-          var startBtn = document.getElementById('start-btn');
-          var stopBtn = document.getElementById('stop-btn');
-          if (startBtn) startBtn.style.display = me.studying ? 'none' : 'inline-flex';
-          if (stopBtn) stopBtn.style.display = me.studying ? 'inline-flex' : 'none';
+          document.getElementById('start-btn').style.display = me.studying ? 'none' : 'inline-flex';
+          document.getElementById('stop-btn').style.display = me.studying ? 'inline-flex' : 'none';
           if (me.studying && !heartbeatTimer) startHeartbeat();
           if (!me.studying && heartbeatTimer) stopHeartbeat();
-
-          // Mini timer bar
           if (me.studying && window.absMiniTimer) {
             window.absMiniTimer.show(me.startMs, GROUP_ID);
           } else if (!me.studying && window.absMiniTimer) {
@@ -211,27 +275,37 @@
         }
       }
 
+      var reconnectStrip = null;
+
+      function showReconnecting(show) {
+        if (!reconnectStrip) {
+          reconnectStrip = document.createElement('div');
+          reconnectStrip.className = 'reconnecting';
+          reconnectStrip.textContent = 'Reconnecting…';
+          var main = document.querySelector('.app-main');
+          if (main) main.parentNode.insertBefore(reconnectStrip, main);
+        }
+        reconnectStrip.style.display = show ? '' : 'none';
+      }
+
       function connect() {
         var proto = location.protocol === 'https:' ? 'wss' : 'ws';
         var ws = new WebSocket(proto + '://' + location.host + '/ws/group/' + GROUP_ID);
+        ws.onopen = function() { showReconnecting(false); };
         ws.onmessage = function(e) {
           var msg = JSON.parse(e.data);
-          if (msg.type === 'state') {
-            members = msg.members;
-          } else if (msg.type === 'update') {
+          if (msg.type === 'state') { members = msg.members; }
+          else if (msg.type === 'update') {
             var found = false;
             for (var i = 0; i < members.length; i++) {
-              if (members[i].userId === msg.member.userId) {
-                members[i] = msg.member;
-                found = true;
-                break;
-              }
+              if (members[i].userId === msg.member.userId) { members[i] = msg.member; found = true; break; }
             }
             if (!found) members.push(msg.member);
           }
           render();
         };
         ws.onclose = function() {
+          showReconnecting(true);
           setTimeout(connect, 3000);
         };
       }
@@ -243,6 +317,7 @@
         fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
       });
 
+      // Nudge
       document.querySelectorAll('.nudge-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var targetId = btn.getAttribute('data-user');
@@ -251,57 +326,30 @@
           fetch(GROUP_PATH + '/nudge/' + targetId, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-              if (d.ok) {
-                msgEl.style.color = 'var(--success)';
-                msgEl.textContent = 'Nudged!';
-              } else {
-                msgEl.style.color = 'var(--danger)';
-                msgEl.textContent = d.error || 'Failed';
-              }
+              if (d.ok) { msgEl.style.color = 'var(--success)'; msgEl.textContent = 'Nudged!'; }
+              else { msgEl.style.color = 'var(--danger)'; msgEl.textContent = d.error || 'Failed'; }
               setTimeout(function() { msgEl.textContent = ''; }, 4000);
             })
             .catch(function() {});
         });
       });
 
+      // Notifications
       var notifStatus = document.getElementById('notif-status');
       var notifBtn = document.getElementById('notif-btn');
       var vapidAvailable = false;
 
       function updateNotifUI(subscribed) {
-        if (!('Notification' in window)) {
-          notifStatus.textContent = 'Notifications not supported';
-          notifBtn.style.display = 'none';
-          return;
-        }
-        if (!vapidAvailable) {
-          notifStatus.textContent = 'Push not configured';
-          notifBtn.style.display = 'none';
-          return;
-        }
-        if (Notification.permission === 'denied') {
-          notifStatus.textContent = 'Notifications blocked';
-          notifBtn.style.display = 'none';
-        } else if (subscribed) {
-          notifStatus.textContent = 'Notifications on';
-          notifBtn.textContent = 'Resubscribe';
-          notifBtn.style.display = 'inline-flex';
-        } else {
-          notifStatus.textContent = Notification.permission === 'granted' ? 'Notifications off' : 'Notifications off';
-          notifBtn.textContent = 'Turn on notifications';
-          notifBtn.style.display = 'inline-flex';
-        }
+        if (!('Notification' in window)) { notifStatus.textContent = 'Not supported'; notifBtn.style.display = 'none'; return; }
+        if (!vapidAvailable) { notifStatus.textContent = 'Push not configured'; notifBtn.style.display = 'none'; return; }
+        if (Notification.permission === 'denied') { notifStatus.textContent = 'Blocked'; notifBtn.style.display = 'none'; }
+        else if (subscribed) { notifStatus.textContent = 'Notifications on'; notifBtn.style.display = 'none'; }
+        else { notifStatus.textContent = ''; notifBtn.style.display = 'inline'; }
       }
 
       notifBtn.addEventListener('click', function() {
-        if (Notification.permission === 'granted') {
-          subscribeForPush();
-        } else {
-          Notification.requestPermission().then(function(perm) {
-            if (perm === 'granted') subscribeForPush();
-            updateNotifUI(false);
-          });
-        }
+        if (Notification.permission === 'granted') subscribeForPush();
+        else Notification.requestPermission().then(function(p) { if (p === 'granted') subscribeForPush(); updateNotifUI(false); });
       });
 
       function subscribeForPush() {
@@ -319,9 +367,8 @@
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
-                }).then(function() { updateNotifUI(true); })
-                  .catch(function() { notifStatus.textContent = 'Failed to save subscription'; });
-              }).catch(function(e) { notifStatus.textContent = 'Subscription failed: ' + e.message; });
+                }).then(function() { updateNotifUI(true); }).catch(function() {});
+              }).catch(function() {});
           });
         });
       }
@@ -329,11 +376,51 @@
       fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
         vapidAvailable = !!d.key;
         updateNotifUI(false);
-      }).catch(function() { notifStatus.textContent = 'Could not check push config'; });
+      }).catch(function() { notifStatus.textContent = 'Unavailable'; });
 
       setInterval(render, 1000);
       render();
       connect();
+
+      // --- Dialogs ---
+      var leaveDialog = document.getElementById('leave-dialog');
+      document.getElementById('leave-group-btn').addEventListener('click', function() { leaveDialog.style.display = 'flex'; });
+      document.getElementById('leave-dialog-close').addEventListener('click', function() { leaveDialog.style.display = 'none'; });
+      document.getElementById('leave-dialog-cancel').addEventListener('click', function() { leaveDialog.style.display = 'none'; });
+      leaveDialog.addEventListener('click', function(e) { if (e.target === leaveDialog) leaveDialog.style.display = 'none'; });
+
+      var removeDialog = document.getElementById('remove-dialog');
+      document.querySelectorAll('.remove-member-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.getElementById('remove-name').textContent = btn.getAttribute('data-name');
+          document.getElementById('remove-form').action = '/group/' + GROUP_ID + '/remove/' + btn.getAttribute('data-user');
+          removeDialog.style.display = 'flex';
+        });
+      });
+      document.getElementById('remove-dialog-close').addEventListener('click', function() { removeDialog.style.display = 'none'; });
+      document.getElementById('remove-dialog-cancel').addEventListener('click', function() { removeDialog.style.display = 'none'; });
+      removeDialog.addEventListener('click', function(e) { if (e.target === removeDialog) removeDialog.style.display = 'none'; });
+
+      // Copy invite code
+      document.querySelectorAll('.copy-code-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var code = btn.getAttribute('data-code');
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(code).then(function() {
+              btn.textContent = 'Copied!';
+              setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+            }).catch(function() {});
+          } else {
+            // fallback
+            var ta = document.createElement('textarea');
+            ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+          }
+        });
+      });
     })();
   </script>
   <% } %>

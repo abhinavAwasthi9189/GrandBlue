@@ -12,9 +12,11 @@ function formatDur(ms) {
 <html lang="en">
 <head>
 <%- include('_layout', { title: group.name + ' history', page: 'groups', wide: true }) %>
-  <div style="display:flex;align-items:center;gap:var(--space-md);margin-bottom:var(--space-lg)">
-    <a href="/group/<%= group.id %>" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
-    <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %> — Study history</h1>
+  <div class="header-bar" style="margin-bottom:var(--space-lg)">
+    <div style="display:flex;align-items:center;gap:var(--space-md);min-width:0">
+      <a href="/group/<%= group.id %>" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= group.name %> — Study history</h1>
+    </div>
   </div>
 
   <% if (members.length === 0) { %>

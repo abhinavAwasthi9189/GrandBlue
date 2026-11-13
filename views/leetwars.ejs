@@ -1,15 +1,33 @@
-<!DOCTYPE html>
+<%
+function hueFromId(id) {
+  var hash = 0;
+  for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
+  return ((hash % 360) + 360) % 360;
+}
+function ago(ms) {
+  var s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return s + 's ago';
+  var m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  return h + 'h ' + (m % 60) + 'm ago';
+}
+%><!DOCTYPE html>
 <html lang="en">
 <head>
-<%- include('_layout', { title: 'Leetwars' + (group ? ' - ' + group.name : ''), page: 'groups', wide: true }) %>
-  <div style="display:flex;align-items:center;gap:var(--space-md);margin-bottom:var(--space-lg)">
-    <% if (group) { %>
-      <a href="/group/<%= group.id %>" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
-      <h1 style="font-size:var(--font-xl);font-weight:700"><%= group.name %> — Leetwars</h1>
-    <% } else { %>
-      <a href="/" class="btn btn-ghost btn-sm" style="font-size:1.2rem;padding:4px 8px">←</a>
-      <h1 style="font-size:var(--font-xl);font-weight:700">Leetwars</h1>
-    <% } %>
+<%- include('_layout', { title: group.name + ' Leetwars', page: 'groups', wide: true }) %>
+  <div class="header-bar" style="margin-bottom:var(--space-md)">
+    <div style="display:flex;align-items:center;gap:var(--space-md);min-width:0">
+      <a href="/group/<%= group.id %>" class="btn-back" style="font-size:1.2rem;text-decoration:none;color:var(--text-secondary)">←</a>
+      <h1 style="font-size:var(--font-xl);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= group.name %></h1>
+    </div>
+  </div>
+
+  <!-- Top tabs -->
+  <div style="display:flex;gap:1px;margin-bottom:var(--space-lg);background:var(--bg-tertiary);border-radius:var(--radius-md);overflow:hidden">
+    <a href="/group/<%= group.id %>" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Members</a>
+    <a href="/group/<%= group.id %>/study" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-tertiary);padding:10px;text-decoration:none;color:var(--text-secondary)">Study</a>
+    <a href="/group/<%= group.id %>/leetwars" class="btn btn-sm" style="flex:1;border-radius:0;background:var(--bg-card);padding:10px;text-decoration:none;font-weight:500">Leetwars</a>
   </div>
 
   <% if (!hasLeetcode) { %>
@@ -27,15 +45,15 @@
     </div>
     <div class="empty-state" style="margin-top:var(--space-lg)"><div class="empty-state-text">Leaderboard hidden until you link an account.</div></div>
   <% } else { %>
-    <div class="card" style="margin-bottom:var(--space-md)">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div>LeetCode: <strong><%= leetcodeUsername %></strong></div>
-        <div style="display:flex;gap:var(--space-sm)">
-          <button id="change-btn" class="btn btn-sm btn-secondary" type="button">Change</button>
-          <button id="unlink-btn" class="btn btn-sm btn-danger" type="button">Unlink</button>
-        </div>
+    <div class="card" style="margin-bottom:var(--space-md);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        LeetCode: <strong><%= leetcodeUsername %></strong>
+        <span id="lc-msg" style="font-size:var(--font-sm);color:var(--text-secondary);margin-left:var(--space-sm)"></span>
       </div>
-      <span id="lc-msg" style="font-size:var(--font-sm);color:var(--text-secondary)"></span>
+      <div style="display:flex;gap:var(--space-sm)">
+        <button id="change-btn" class="btn btn-sm btn-secondary" type="button">Change</button>
+        <button id="unlink-btn" class="btn btn-sm btn-danger" type="button">Unlink</button>
+      </div>
       <form id="lc-form" style="display:none;margin-top:var(--space-md)">
         <div style="display:flex;gap:var(--space-sm)">
           <input id="lc-input" name="leetcode_username" value="<%= leetcodeUsername %>" placeholder="LeetCode username" required
@@ -46,120 +64,312 @@
       </form>
     </div>
 
-    <p style="font-size:var(--font-sm);color:var(--text-tertiary);margin-bottom:var(--space-md)">Polled every 20 minutes. New solves appear in the next cycle.</p>
+    <!-- Week picker -->
+    <div class="card" style="margin-bottom:var(--space-lg);display:flex;align-items:center;justify-content:space-between">
+      <button class="btn btn-sm btn-ghost" id="prev-week" type="button" style="font-size:1.1rem">←</button>
+      <div style="text-align:center">
+        <div id="week-label" style="font-weight:600"></div>
+        <div style="font-size:var(--font-sm);color:var(--text-tertiary)">IST (Mon–Sun)</div>
+      </div>
+      <button class="btn btn-sm btn-ghost" id="next-week" type="button" style="font-size:1.1rem">→</button>
+    </div>
 
-    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Weekly leaderboard</h2>
-    <% if (leaderboard.length === 0) { %>
-      <div class="empty-state"><div class="empty-state-text">No members yet.</div></div>
-    <% } else { %>
-      <div class="card" style="overflow-x:auto;padding:0">
-        <table style="width:100%;border-collapse:collapse;font-size:var(--font-sm)">
-          <tr style="border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">#</th>
-            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Username</th>
-            <th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600">XP</th>
-            <th style="text-align:right;padding:var(--space-sm) var(--space-md);font-weight:600">Solved</th>
-            <th style="text-align:left;padding:var(--space-sm) var(--space-md);font-weight:600">Problems</th>
-          </tr>
-          <% leaderboard.forEach(function(e, i) { %>
-            <tr style="border-bottom:1px solid var(--border-light)">
-              <td style="padding:var(--space-sm) var(--space-md)"><%= i + 1 %></td>
-              <td style="padding:var(--space-sm) var(--space-md)"><%= e.username %></td>
-              <td style="padding:var(--space-sm) var(--space-md);text-align:right;font-family:var(--font-mono)"><%= e.xp %></td>
-              <td style="padding:var(--space-sm) var(--space-md);text-align:right"><%= e.solved_count %></td>
-              <td style="padding:var(--space-sm) var(--space-md)">
-                <% var solves = solvesMap[e.id] || []; %>
-                <% if (solves.length === 0) { %><span class="text-secondary"><em>none</em></span><% } else { %>
-                  <% solves.forEach(function(s) { %>
-                    <a href="https://leetcode.com/problems/<%= s.slug %>/" target="_blank" style="white-space:nowrap"><%= s.slug %></a> <span class="chip" style="font-size:10px;padding:1px 5px"><%= s.difficulty %></span><br>
-                  <% }); %>
-                <% } %>
-              </td>
-            </tr>
-          <% }); %>
-        </table>
+    <!-- Quota card -->
+    <% if (quota > 0) { %>
+      <% var myStats = leaderboard.filter(function(e) { return e.id === session.userId; }); %>
+      <% var mySolved = myStats.length > 0 ? myStats[0].solved_count : 0; %>
+      <% var pct = Math.min(100, Math.round(mySolved / quota * 100)); %>
+      <div class="card" style="margin-bottom:var(--space-lg)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-sm)">
+          <span style="font-weight:600">You</span>
+          <span style="font-family:var(--font-mono);font-size:var(--font-sm)"><%= mySolved %> of <%= quota %> problems this week</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-bar-fill<%= mySolved >= quota ? ' complete' : '' %>" style="width:<%= pct %>%"></div>
+        </div>
       </div>
     <% } %>
 
-    <% if (quota > 0) { %>
-      <h2 style="font-size:var(--font-lg);font-weight:600;margin:var(--space-lg) 0 var(--space-md)">Behind on quota</h2>
-      <% if (behind.length === 0) { %>
-        <div class="empty-state"><div class="empty-state-text">Everyone meets the quota of <%= quota %> problems.</div></div>
+    <div class="study-split">
+    <!-- XP Leaderboard -->
+    <div class="card" style="margin-bottom:var(--space-lg)">
+      <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Leaderboard</h2>
+      <% if (leaderboard.length === 0) { %>
+        <div class="empty-state"><div class="empty-state-text">No members yet.</div></div>
       <% } else { %>
-        <% behind.forEach(function(b) { %>
-          <div class="list-row">
-            <div class="row-main">
-              <div class="row-label"><%= b.username %></div>
-              <div class="row-sub">
-                <% if (b.notLinked) { %>
-                  <em>not linked</em>, <strong><%= b.owed %></strong> behind
-                <% } else { %>
-                  <%= b.solved %>/<%= b.solved + b.owed %> solved, <strong><%= b.owed %></strong> behind
-                <% } %>
+        <% var leaderXp = leaderboard.length > 0 ? leaderboard[0].xp : 1; %>
+        <% leaderboard.forEach(function(e, i) { %>
+          <% var hue = hueFromId(e.id); %>
+          <% var isMe = e.id === session.userId; %>
+          <% var barPct = Math.round(e.xp / leaderXp * 100); %>
+          <div style="display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) 0">
+            <span style="width:20px;text-align:center;font-weight:600;font-size:var(--font-sm);color:var(--text-secondary)"><%= i + 1 %></span>
+            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= e.username.charAt(0).toUpperCase() %></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:<%= isMe ? '700' : '500' %>;font-size:var(--font-sm)">
+                <%= e.username %><% if (isMe) { %> <span style="color:var(--text-tertiary);font-weight:400">(you)</span><% } %>
+                <% if (!e.leetcode_username) { %><span class="chip" style="font-size:10px;padding:1px 6px;background:var(--warning-light);color:var(--warning)">unlinked</span><% } %>
+              </div>
+              <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);height:6px;overflow:hidden;margin-top:4px">
+                <div style="height:100%;border-radius:var(--radius-full);background:hsl(<%= hue %>,55%,50%);width:<%= barPct %>%"></div>
               </div>
             </div>
+            <span style="font-family:var(--font-mono);font-size:var(--font-sm);font-weight:600;text-align:right;min-width:48px"><%= e.xp %> XP</span>
+            <span style="font-family:var(--font-mono);font-size:var(--font-sm);color:var(--text-secondary);text-align:right;min-width:20px"><%= e.solved_count %></span>
           </div>
         <% }); %>
       <% } %>
-    <% } else { %>
-      <p style="margin-top:var(--space-lg);font-size:var(--font-sm);color:var(--text-tertiary)">No weekly quota set. An admin can set one in Settings.</p>
-    <% } %>
+    </div>
+
+    <!-- Comparison chart -->
+    <div class="card" style="margin-bottom:var(--space-lg);height:calc(100vh - 420px);min-height:200px;max-height:600px;display:flex;flex-direction:column">
+      <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Daily XP comparison</h2>
+      <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);margin-bottom:var(--space-md)"></div>
+      <div style="flex:1;min-height:0;position:relative"><canvas id="leetwars-chart"></canvas></div>
+    </div>
+
+    </div>
+
+    <!-- Behind on quota + Recent solves side by side on desktop -->
+    <div style="display:flex;flex-direction:column;gap:var(--space-lg)">
+      <div class="card">
+        <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Behind on quota</h2>
+        <% if (quota === 0) { %>
+          <p style="font-size:var(--font-sm);color:var(--text-tertiary)">No weekly quota set. An admin can set one in Settings.</p>
+        <% } else if (behind.length === 0) { %>
+          <div class="empty-state"><div class="empty-state-text">Everyone meets the quota of <%= quota %> problems.</div></div>
+        <% } else { %>
+          <% behind.forEach(function(b) { %>
+            <div class="list-row">
+              <% var hue = hueFromId(b.id); %>
+              <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= b.username.charAt(0).toUpperCase() %></div>
+              <div class="row-main">
+                <div class="row-label" style="font-size:var(--font-sm)"><%= b.username %></div>
+                <div class="row-sub">
+                  <% if (b.notLinked) { %>
+                    <em>not linked</em>, <strong><%= b.owed %></strong> behind
+                  <% } else { %>
+                    <%= b.solved %>/<%= b.solved + b.owed %> solved, <strong><%= b.owed %></strong> behind
+                  <% } %>
+                </div>
+              </div>
+              <% if (b.id !== session.userId && !b.notLinked) { %>
+                <button class="nudge-btn btn btn-sm btn-secondary" data-user="<%= b.id %>" type="button">Nudge</button>
+              <% } %>
+            </div>
+          <% }); %>
+        <% } %>
+      </div>
+
+      <!-- Recent solves feed -->
+      <div class="card">
+        <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Recent solves</h2>
+        <% var allSolves = []; leaderboard.forEach(function(e) { (solvesMap[e.id] || []).forEach(function(s) { allSolves.push({ userId: e.id, username: e.username, slug: s.slug, difficulty: s.difficulty, solvedAt: s.solved_at_ms }); }); }); %>
+        <% allSolves.sort(function(a, b) { return b.solvedAt - a.solvedAt; }); %>
+        <% if (allSolves.length === 0) { %>
+          <div class="empty-state"><div class="empty-state-text">No solves this week yet.</div></div>
+        <% } else { %>
+          <% allSolves.slice(0, 20).forEach(function(s) { %>
+            <% var hue = hueFromId(s.userId); %>
+            <% var diffClass = s.difficulty === 'Easy' ? 'chip-accent' : s.difficulty === 'Medium' ? 'chip-warning' : 'chip-danger'; %>
+            <div class="list-row" style="font-size:var(--font-sm)">
+              <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:24px;height:24px;font-size:10px"><%= s.username.charAt(0).toUpperCase() %></div>
+              <div class="row-main">
+                <div class="row-label">
+                  <strong><%= s.username %></strong> solved
+                  <a href="https://leetcode.com/problems/<%= s.slug %>/" target="_blank"><%= s.slug %></a>
+                  <span class="chip <%= diffClass %>" style="font-size:10px;padding:1px 6px"><%= s.difficulty %></span>
+                </div>
+              </div>
+              <span style="font-family:var(--font-mono);font-size:var(--font-sm);color:var(--text-secondary)"><%= ago(s.solvedAt) %></span>
+            </div>
+          <% }); %>
+        <% } %>
+      </div>
+    </div>
   <% } %>
 
-  <script>
-    (function() {
-      var form = document.getElementById('lc-form');
-      var input = document.getElementById('lc-input');
-      var msgEl = document.getElementById('lc-msg');
-      var unlinkBtn = document.getElementById('unlink-btn');
-      var changeBtn = document.getElementById('change-btn');
+<script src="/vendor/chart.umd.min.js"></script>
+<script>
+(function() {
+  var GROUP_ID = <%= group.id %>;
+  var ME_ID = <%= session.userId %>;
 
-      function onSubmit(e) {
-        e.preventDefault();
-        var val = input.value.trim();
-        if (!val) return;
-        msgEl.style.color = '';
-        msgEl.textContent = 'Checking...';
-        fetch('/profile/leetcode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leetcode_username: val }),
-        }).then(function(r) { return r.json(); }).then(function(d) {
-          if (d.ok) {
-            msgEl.style.color = 'var(--success)';
-            msgEl.textContent = 'Saved! Reloading...';
-            setTimeout(function() { location.reload(); }, 1000);
-          } else {
-            msgEl.style.color = 'var(--danger)';
-            msgEl.textContent = d.error || 'Error';
-            setTimeout(function() { msgEl.textContent = ''; }, 5000);
+  function hueFromId(id) {
+    var hash = 0;
+    for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
+    return ((hash % 360) + 360) % 360;
+  }
+
+  function getMondayIST(ms) {
+    var offset = 5.5 * 3600000;
+    var ist = new Date(ms + offset);
+    var day = ist.getUTCDay();
+    var diff = (day === 0 ? -6 : 1 - day);
+    ist.setUTCDate(ist.getUTCDate() + diff);
+    ist.setUTCHours(0, 0, 0, 0);
+    return ist.getTime() - offset;
+  }
+
+  function weekLabel(weekStart) {
+    var opts = { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' };
+    var ms = new Date(weekStart);
+    var end = new Date(weekStart + 7 * 86400000 - 1);
+    return ms.toLocaleDateString('en-GB', opts) + ' – ' + end.toLocaleDateString('en-GB', opts);
+  }
+
+  var currentWeekStart = getMondayIST(Date.now());
+  var chartInstance = null;
+
+  function loadWeek(weekStart) {
+    var param = 'week=' + new Date(weekStart).toISOString().slice(0, 10);
+    fetch('/api/group/' + GROUP_ID + '/leetwars/daily?' + param)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.ok) { throw new Error('API error'); }
+        renderChart(d);
+        document.getElementById('week-label').textContent = weekLabel(weekStart);
+      })
+      .catch(function() {
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+        var chartLegend = document.getElementById('chart-legend');
+        if (chartLegend) chartLegend.innerHTML = '<div style="text-align:center;padding:var(--space-lg);color:var(--text-tertiary);font-size:var(--font-sm)">Failed to load. <a href="javascript:location.reload()">Retry</a></div>';
+      });
+  }
+
+  function renderChart(d) {
+    var legendEl = document.getElementById('chart-legend');
+    legendEl.innerHTML = '';
+    var labels = d.days.map(function(day) { return day.label; });
+
+    d.members.forEach(function(m) {
+      var hue = hueFromId(m.userId);
+      var color = 'hsl(' + hue + ', 55%, 50%)';
+      var item = document.createElement('span');
+      item.className = 'chip';
+      item.style.cssText = 'cursor:pointer;transition:opacity 0.15s';
+      item.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:6px"></span>' + m.username;
+      item.dataset.userId = m.userId;
+      legendEl.appendChild(item);
+    });
+
+    var datasets = d.members.map(function(m) {
+      var hue = hueFromId(m.userId);
+      var isMe = m.userId === ME_ID;
+      var vals = d.days.map(function(day) {
+        var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
+        return found.length ? found[0].xp : 0;
+      });
+      return {
+        label: m.username,
+        data: vals,
+        borderColor: 'hsl(' + hue + ', 55%, 50%)',
+        backgroundColor: 'hsl(' + hue + ', 55%, 50%)',
+        borderWidth: isMe ? 4 : 2,
+        pointRadius: isMe ? 4 : 3,
+        pointHoverRadius: 6,
+        tension: 0.2,
+        fill: false,
+        userId: m.userId,
+      };
+    });
+
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(document.getElementById('leetwars-chart'), {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) { return ctx.dataset.label + ': ' + ctx.parsed.y + ' XP'; }
+            }
           }
-        }).catch(function() {
-          msgEl.style.color = 'var(--danger)';
-          msgEl.textContent = 'Network error';
-        });
+        },
+        scales: {
+          x: { ticks: { color: '#9898a8', font: { size: 10 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#9898a8', font: { size: 10 }, callback: function(v) { return v + ' XP'; } }, grid: { color: '#2e2e3a' } }
+        }
       }
+    });
 
-      if (form) form.addEventListener('submit', onSubmit);
+    legendEl.querySelectorAll('.chip').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var uid = Number(item.dataset.userId);
+        var ds = chartInstance.data.datasets.filter(function(ds2) { return ds2.userId === uid; });
+        if (ds.length) {
+          ds[0].hidden = !ds[0].hidden;
+          item.style.opacity = ds[0].hidden ? '0.4' : '1';
+          chartInstance.update();
+        }
+      });
+    });
+  }
 
-      if (changeBtn) {
-        changeBtn.addEventListener('click', function() {
-          form.style.display = '';
-          changeBtn.style.display = 'none';
-        });
-      }
+  document.getElementById('prev-week').addEventListener('click', function() {
+    currentWeekStart -= 7 * 86400000;
+    loadWeek(currentWeekStart);
+  });
+  document.getElementById('next-week').addEventListener('click', function() {
+    var next = currentWeekStart + 7 * 86400000;
+    if (next <= getMondayIST(Date.now())) {
+      currentWeekStart = next;
+      loadWeek(currentWeekStart);
+    }
+  });
 
-      if (unlinkBtn) {
-        unlinkBtn.addEventListener('click', function() {
-          fetch('/profile/leetcode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ leetcode_username: '' }),
-          }).then(function(r) { return r.json(); }).then(function(d) {
-            if (d.ok) { location.reload(); }
-          });
-        });
-      }
-    })();
-  </script>
+  // Load this week
+  loadWeek(currentWeekStart);
+
+  // --- LeetCode link/unlink ---
+  var formEl = document.getElementById('lc-form');
+  var inputEl = document.getElementById('lc-input');
+  var msgEl = document.getElementById('lc-msg');
+  var unlinkBtn = document.getElementById('unlink-btn');
+  var changeBtn = document.getElementById('change-btn');
+
+  function onSubmit(e) {
+    e.preventDefault();
+    var val = inputEl.value.trim();
+    if (!val) return;
+    if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'Checking...'; }
+    fetch('/profile/leetcode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leetcode_username: val }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok) { if (msgEl) { msgEl.style.color = 'var(--success)'; msgEl.textContent = 'Saved! Reloading...'; } setTimeout(function() { location.reload(); }, 1000); }
+      else { if (msgEl) { msgEl.style.color = 'var(--danger)'; msgEl.textContent = d.error || 'Error'; } }
+    }).catch(function() { if (msgEl) { msgEl.style.color = 'var(--danger)'; msgEl.textContent = 'Network error'; } });
+  }
+
+  if (formEl) formEl.addEventListener('submit', onSubmit);
+  if (changeBtn) { changeBtn.addEventListener('click', function() { formEl.style.display = ''; changeBtn.style.display = 'none'; }); }
+  if (unlinkBtn) {
+    unlinkBtn.addEventListener('click', function() {
+      fetch('/profile/leetcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leetcode_username: '' }),
+      }).then(function(r) { return r.json(); }).then(function(d) { if (d.ok) location.reload(); });
+    });
+  }
+
+  // --- Nudge buttons ---
+  document.querySelectorAll('.nudge-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var targetId = btn.getAttribute('data-user');
+      fetch('/group/' + GROUP_ID + '/nudge/' + targetId, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) { btn.textContent = 'Nudged!'; setTimeout(function() { btn.textContent = 'Nudge'; }, 4000); }
+          else { btn.style.color = 'var(--danger)'; setTimeout(function() { btn.style.color = ''; }, 4000); }
+        })
+        .catch(function() {});
+    });
+  });
+})();
+</script>
 <%- include('_layout_close') %>

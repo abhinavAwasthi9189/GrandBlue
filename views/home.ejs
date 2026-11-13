@@ -8,57 +8,74 @@
 
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-lg)">
     <h1 style="font-size:var(--font-xl);font-weight:700">Groups</h1>
-    <div style="display:flex;align-items:center;gap:var(--space-md);font-size:var(--font-sm)">
-      <span><%= session.username %></span>
-      <% if (hasLeetcode) { %>
-        <span class="chip chip-success">✓ LeetCode linked</span>
-      <% } else { %>
-        <a href="/leetwars" class="chip chip-warning" style="text-decoration:none">Link LeetCode</a>
-      <% } %>
+    <div style="display:flex;align-items:center;gap:var(--space-sm)">
+      <button class="btn btn-ghost btn-sm mobile-join-row" id="open-join" type="button">Join with code</button>
+      <button class="btn btn-primary btn-sm desktop-new-btn" id="desktop-new-btn" type="button" style="display:none">New group</button>
       <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
     </div>
   </div>
 
+  <!-- Pending invites -->
   <% if (pendingInvites.length > 0) { %>
-    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Pending Invites</h2>
-    <% pendingInvites.forEach(function(g) { %>
-      <div class="card" style="margin-bottom:var(--space-sm)">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div><strong><%= g.name %></strong></div>
-          <div style="display:flex;gap:var(--space-sm)">
+    <div style="margin-bottom:var(--space-lg)">
+      <% pendingInvites.forEach(function(g) { %>
+        <div class="card" style="margin-bottom:var(--space-sm);display:flex;align-items:center;justify-content:space-between;gap:var(--space-md)">
+          <div>
+            <div style="font-weight:600"><%= g.name %></div>
+            <div style="font-size:var(--font-sm);color:var(--text-secondary)">Invited by <%= g.invited_by %></div>
+          </div>
+          <div style="display:flex;gap:var(--space-sm);flex-shrink:0">
             <form method="POST" action="/invite/<%= g.id %>/accept"><button class="btn btn-sm btn-primary">Accept</button></form>
             <form method="POST" action="/invite/<%= g.id %>/decline"><button class="btn btn-sm btn-secondary">Decline</button></form>
           </div>
         </div>
-      </div>
-    <% }); %>
+      <% }); %>
+    </div>
   <% } %>
 
-  <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md);margin-top:var(--space-lg)">My Groups</h2>
-  <% if (myGroups.length === 0 && pendingRequests.length === 0) { %>
-    <div class="empty-state">
+  <!-- Group cards -->
+  <% if (myGroups.length === 0 && pendingRequests.length === 0 && pendingInvites.length === 0) { %>
+    <div class="empty-state" style="margin-top:80px">
       <div class="empty-state-icon">⊞</div>
       <div class="empty-state-title">No groups yet</div>
       <div class="empty-state-text">Create one or join with a code.</div>
     </div>
   <% } else { %>
-    <% myGroups.forEach(function(g) { %>
-      <div class="list-row" style="margin-bottom:2px;cursor:pointer" onclick="window.location='/group/<%= g.id %>'">
-        <div class="row-main">
-          <div class="row-label"><%= g.name %></div>
-          <div class="row-sub"><%= g.role %></div>
+    <div class="group-cards" style="margin-bottom:var(--space-md)">
+      <% myGroups.forEach(function(g) { %>
+        <div class="card" style="margin-bottom:var(--space-sm);cursor:pointer" onclick="window.location='/group/<%= g.id %>'">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between">
+            <div>
+              <div style="font-weight:600;font-size:var(--font-lg)"><%= g.name %></div>
+              <div style="font-size:var(--font-sm);color:var(--text-secondary);margin-top:var(--space-xs)">
+                <%= g.memberCount %>/15 members
+                <% if (g.studyingNow > 0) { %>
+                  · <span style="color:var(--success)"><%= g.studyingNow %> studying now</span>
+                <% } %>
+              </div>
+            </div>
+            <div style="text-align:right;font-size:var(--font-sm)">
+              <div style="font-family:var(--font-mono);font-weight:600">
+                <% var s = Math.floor(g.myWeekMs / 1000); var h = Math.floor(s / 3600); var m = Math.floor((s % 3600) / 60); %><%= h %>h <%= m %>m
+              </div>
+              <div style="color:var(--text-tertiary)">this week</div>
+            </div>
+          </div>
         </div>
+      <% }); %>
+    </div>
+
+    <% if (pendingRequests.length > 0) { %>
+      <div style="margin-bottom:var(--space-md)">
+        <div style="font-size:var(--font-sm);font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-sm)">Requested</div>
+        <% pendingRequests.forEach(function(g) { %>
+          <div class="list-row"><div class="row-main"><div class="row-label"><%= g.name %></div><div class="row-sub text-secondary">pending approval</div></div></div>
+        <% }); %>
       </div>
-    <% }); %>
+    <% } %>
   <% } %>
 
-  <% if (pendingRequests.length > 0) { %>
-    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md);margin-top:var(--space-lg)">Requested</h2>
-    <% pendingRequests.forEach(function(g) { %>
-      <div class="list-row"><div class="row-main"><div class="row-label"><%= g.name %></div><div class="row-sub text-secondary">pending approval</div></div></div>
-    <% }); %>
-  <% } %>
-
+  <!-- FAB -->
   <button class="fab" id="create-group-fab" type="button" aria-label="Create group">+</button>
 
   <!-- Create group bottom sheet -->
@@ -102,27 +119,17 @@
 
   <script>
     (function() {
-      var fab = document.getElementById('create-group-fab');
       var createDialog = document.getElementById('create-dialog');
       var joinDialog = document.getElementById('join-dialog');
 
-      if (fab) {
-        fab.addEventListener('click', function() { createDialog.style.display = 'flex'; });
-      }
+      document.getElementById('create-group-fab').addEventListener('click', function() { createDialog.style.display = 'flex'; });
       document.getElementById('create-close').addEventListener('click', function() { createDialog.style.display = 'none'; });
+      document.getElementById('open-join').addEventListener('click', function() { joinDialog.style.display = 'flex'; });
       document.getElementById('join-close').addEventListener('click', function() { joinDialog.style.display = 'none'; });
       createDialog.addEventListener('click', function(e) { if (e.target === createDialog) createDialog.style.display = 'none'; });
       joinDialog.addEventListener('click', function(e) { if (e.target === joinDialog) joinDialog.style.display = 'none'; });
-
-      // Join with code - add button to top bar
-      var topBar = document.querySelector('.app-main > div:first-child');
-      if (topBar) {
-        var joinBtn = document.createElement('button');
-        joinBtn.className = 'btn btn-ghost btn-sm';
-        joinBtn.textContent = 'Join';
-        joinBtn.addEventListener('click', function() { joinDialog.style.display = 'flex'; });
-        topBar.querySelector('div:last-child').appendChild(joinBtn);
-      }
+      var desktopNewBtn = document.getElementById('desktop-new-btn');
+      if (desktopNewBtn) { desktopNewBtn.addEventListener('click', function() { createDialog.style.display = 'flex'; }); }
     })();
   </script>
 <%- include('_layout_close') %>

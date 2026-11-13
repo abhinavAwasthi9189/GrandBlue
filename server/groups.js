@@ -74,6 +74,59 @@ module.exports = async function (fastify, opts) {
     return reply.view('group', { session: req.session, group, membership, members, pendingRequests, inviteLinks, isMember: true, pendingInviteCount, error: req.query.error || null });
   });
 
+  function formatWeekLabel(weekStart) {
+    const fmt = (ms) => new Date(ms).toLocaleDateString('en-GB', {
+      timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short',
+    });
+    return fmt(weekStart) + ' – ' + fmt(weekStart + studyState.WEEK_MS - 1);
+  }
+
+  fastify.get('/group/:id/study', async (req, reply) => {
+    const group = fastify.db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id);
+    if (!group) return reply.callNotFound();
+    const membership = fastify.db.prepare(
+      "SELECT * FROM memberships WHERE group_id = ? AND user_id = ? AND status = 'active'"
+    ).get(req.params.id, req.session.userId);
+    if (!membership) return reply.redirect('/group/' + req.params.id);
+
+    // Past weeks (newest first, same as history)
+    const weekStart = studyState.getWeekStartIST();
+    const WEEKS_PER_PAGE = 10;
+    const historyWeeks = [];
+    for (let i = 0; i < WEEKS_PER_PAGE; i++) {
+      const start = weekStart - (i + 1) * studyState.WEEK_MS;
+      const end = start + studyState.WEEK_MS;
+      historyWeeks.push({
+        label: formatWeekLabel(start),
+        totals: studyState.weekTotalsForGroup(fastify.db, req.params.id, start, end),
+      });
+    }
+    const allMembers = studyState.getActiveMembers(fastify.db, req.params.id).map(m => ({
+      ...studyState.getMemberState(fastify.db, m.id), role: m.role,
+    }));
+
+    const pendingInviteCount = fastify.db.prepare(
+      "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'invited'"
+    ).get(req.session.userId).cnt;
+    return reply.view('group-study', { session: req.session, group, membership, pendingInviteCount, historyWeeks, allMembers });
+  });
+
+  fastify.get('/group/:id/settings', async (req, reply) => {
+    const group = fastify.db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id);
+    if (!group) return reply.callNotFound();
+    const membership = fastify.db.prepare(
+      "SELECT * FROM memberships WHERE group_id = ? AND user_id = ? AND role = 'admin' AND status = 'active'"
+    ).get(req.params.id, req.session.userId);
+    if (!membership) return reply.redirect('/group/' + req.params.id);
+    const inviteLinks = fastify.db.prepare(`
+      SELECT code, expires_at FROM invites WHERE group_id = ? AND expires_at > ?
+    `).all(req.params.id, Date.now());
+    const pendingInviteCount = fastify.db.prepare(
+      "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'invited'"
+    ).get(req.session.userId).cnt;
+    return reply.view('group-settings', { session: req.session, group, membership, inviteLinks, pendingInviteCount });
+  });
+
   fastify.post('/group/:id/invite', async (req, reply) => {
     const { username } = req.body;
     if (!username) return reply.redirect('/group/' + req.params.id);
@@ -282,7 +335,10 @@ module.exports = async function (fastify, opts) {
     ).get(req.params.id, req.session.userId, 'admin', 'active');
     if (!membership) return reply.redirect('/');
 
-    const { weekly_quota } = req.body;
+    const { name, weekly_quota } = req.body;
+    if (name && name.trim().length > 0) {
+      fastify.db.prepare('UPDATE groups SET name = ? WHERE id = ?').run(name.trim(), req.params.id);
+    }
     const quota = parseInt(weekly_quota, 10) || 0;
     fastify.db.prepare('UPDATE groups SET weekly_quota = ? WHERE id = ?').run(quota, req.params.id);
     return reply.redirect('/group/' + req.params.id);
