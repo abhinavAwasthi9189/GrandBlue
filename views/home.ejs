@@ -62,10 +62,20 @@
 
   <script>
     (function() {
+      if (window.navigator.standalone) return;
+
+      var KEY = 'pwa-shown';
+      if (localStorage.getItem(KEY)) return;
+
       var deferredPrompt = null;
       var promptEl = document.getElementById('install-prompt');
       var installBtn = document.getElementById('install-btn');
       var dismissBtn = document.getElementById('install-dismiss');
+
+      function hide() {
+        promptEl.style.display = 'none';
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      }
 
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
@@ -74,33 +84,24 @@
       });
 
       installBtn.addEventListener('click', function() {
+        hide();
         if (deferredPrompt) {
           deferredPrompt.prompt();
           deferredPrompt.userChoice.then(function() { deferredPrompt = null; });
         }
-        promptEl.style.display = 'none';
       });
 
-      dismissBtn.addEventListener('click', function() {
-        promptEl.style.display = 'none';
-      });
+      dismissBtn.addEventListener('click', hide);
 
-      // iOS fallback: show instructions if not in standalone mode and on iOS
-      var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      // iOS fallback
       var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      if (isiOS && !window.navigator.standalone && !localStorage.getItem('pwa-dismissed')) {
+      if (isiOS) {
         promptEl.innerHTML =
           '<p style="margin:0 0 8px"><strong>Install abs</strong><br>Tap <strong>Share</strong> <span style="font-size:20px">⎋</span> then <strong>Add to Home Screen</strong></p>' +
           '<button id="install-dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:8px 24px;border-radius:6px;cursor:pointer">Got it</button>';
         promptEl.style.display = 'block';
-        var iOSdismiss = document.getElementById('install-dismiss');
-        iOSdismiss.addEventListener('click', function() {
-          promptEl.style.display = 'none';
-          localStorage.setItem('pwa-dismissed', '1');
-        });
+        document.getElementById('install-dismiss').addEventListener('click', hide);
       }
-
-      if (window.navigator.standalone) { promptEl.style.display = 'none'; }
     })();
   </script>
 </body>

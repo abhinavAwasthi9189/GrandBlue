@@ -1,8 +1,10 @@
 const Fastify = require('fastify');
 const path = require('path');
 
-const isSecureEnv = process.env.NODE_ENV === 'production' || !!process.env.TRUST_PROXY;
-const fastify = Fastify({ logger: true, trustProxy: isSecureEnv ? 1 : false });
+const fastify = Fastify({
+  logger: true,
+  trustProxy: (addr) => addr === '127.0.0.1' || addr === '::1',
+});
 
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/cookie'));
@@ -25,7 +27,7 @@ const cookieSigner = new Signer(SESSION_SECRET, 'sha256');
 fastify.register(sessionPlugin, {
   secret: SESSION_SECRET,
   store: sessionStore,
-  cookie: { secure: isSecureEnv, httpOnly: true, sameSite: 'Lax', maxAge: 7 * 24 * 60 * 60 * 1000 },
+  cookie: { secure: 'auto', httpOnly: true, sameSite: 'Lax', maxAge: 7 * 24 * 60 * 60 * 1000 },
   saveUninitialized: false,
 });
 
