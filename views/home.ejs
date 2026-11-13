@@ -3,11 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>abs</title>
+  <title>abs - Home</title>
 </head>
 <body>
   <h1>Home</h1>
   <p>Logged in as <strong><%= session.username %></strong></p>
-  <p><a href="/logout">Log out</a></p>
+  <p><a href="/create-group">Create Group</a> | <a href="/logout">Log out</a></p>
+
+  <% if (locals.error) { %>
+    <p style="color:red"><%= error %></p>
+  <% } %>
+
+  <h2>My Groups</h2>
+  <% if (myGroups.length === 0) { %>
+    <p><em>No groups yet.</em></p>
+  <% } else { %>
+    <ul>
+    <% myGroups.forEach(function(g) { %>
+      <li><a href="/group/<%= g.id %>"><%= g.name %></a> (<%= g.role %>)</li>
+    <% }); %>
+    </ul>
+  <% } %>
+
+  <h2>Pending Invites</h2>
+  <% if (pendingInvites.length === 0) { %>
+    <p><em>No pending invites.</em></p>
+  <% } else { %>
+    <ul>
+    <% pendingInvites.forEach(function(g) { %>
+      <li>
+        <strong><%= g.name %></strong>
+        <form method="POST" action="/invite/<%= g.id %>/accept" style="display:inline">
+          <button>Accept</button>
+        </form>
+        <form method="POST" action="/invite/<%= g.id %>/decline" style="display:inline">
+          <button>Decline</button>
+        </form>
+      </li>
+    <% }); %>
+    </ul>
+  <% } %>
+
+  <h2>Requested (waiting for approval)</h2>
+  <% if (pendingRequests.length === 0) { %>
+    <p><em>None.</em></p>
+  <% } else { %>
+    <ul>
+    <% pendingRequests.forEach(function(g) { %>
+      <li><%= g.name %> - <em>pending approval</em></li>
+    <% }); %>
+    </ul>
+  <% } %>
 </body>
 </html>

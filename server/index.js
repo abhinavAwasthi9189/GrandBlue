@@ -29,10 +29,31 @@ fastify.register(require('@fastify/view'), {
 fastify.decorate('db', require('./db'));
 
 fastify.register(require('./auth'));
+fastify.register(require('./groups'));
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
-  return reply.view('home', { session: req.session });
+
+  const myGroups = fastify.db.prepare(`
+    SELECT g.id, g.name, g.weekly_quota, g.created_at, m.role, m.status
+    FROM memberships m JOIN groups g ON g.id = m.group_id
+    WHERE m.user_id = ? AND m.status = 'active'
+    ORDER BY g.name
+  `).all(req.session.userId);
+
+  const pendingInvites = fastify.db.prepare(`
+    SELECT g.id, g.name, m.status, m.created_at
+    FROM memberships m JOIN groups g ON g.id = m.group_id
+    WHERE m.user_id = ? AND m.status = 'invited'
+  `).all(req.session.userId);
+
+  const pendingRequests = fastify.db.prepare(`
+    SELECT g.id, g.name, m.status, m.created_at
+    FROM memberships m JOIN groups g ON g.id = m.group_id
+    WHERE m.user_id = ? AND m.status = 'requested'
+  `).all(req.session.userId);
+
+  return reply.view('home', { session: req.session, myGroups, pendingInvites, pendingRequests, error: req.query.error || null });
 });
 
 async function start() {

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abs - <%= group.name %></title>
+</head>
+<body>
+  <h1><%= group.name %></h1>
+
+  <% if (!membership) { %>
+    <p>You are not a member of this group.</p>
+    <p><a href="/">Back to home</a></p>
+  <% } else { %>
+    <p>Your role: <strong><%= membership.role %></strong> | Status: <strong><%= membership.status %></strong></p>
+    <p>
+      <form method="POST" action="/group/<%= group.id %>/leave" style="display:inline">
+        <button>Leave group</button>
+      </form>
+      <a href="/">Home</a>
+    </p>
+
+    <% if (membership.status === 'active') { %>
+      <h2>Members</h2>
+      <table border="1" cellpadding="4">
+        <tr><th>Username</th><th>Role</th>
+          <% if (membership.role === 'admin') { %><th>Actions</th><% } %>
+        </tr>
+      <% members.forEach(function(m) { %>
+        <tr>
+          <td><%= m.username %></td>
+          <td><%= m.role %></td>
+          <% if (membership.role === 'admin' && m.role !== 'admin') { %>
+            <td>
+              <form method="POST" action="/group/<%= group.id %>/remove/<%= m.id %>" style="display:inline">
+                <button>Remove</button>
+              </form>
+            </td>
+          <% } else { %>
+            <td></td>
+          <% } %>
+        </tr>
+      <% }); %>
+      </table>
+    <% } else { %>
+      <p><em>Waiting for admin approval.</em></p>
+    <% } %>
+
+    <% if (membership.role === 'admin' && membership.status === 'active') { %>
+      <% if (pendingRequests.length > 0) { %>
+        <h2>Pending requests</h2>
+        <ul>
+        <% pendingRequests.forEach(function(r) { %>
+          <li>
+            <strong><%= r.username %></strong>
+            <form method="POST" action="/group/<%= group.id %>/approve/<%= r.id %>" style="display:inline">
+              <button>Approve</button>
+            </form>
+            <form method="POST" action="/group/<%= group.id %>/reject/<%= r.id %>" style="display:inline">
+              <button>Reject</button>
+            </form>
+          </li>
+        <% }); %>
+        </ul>
+      <% } else { %>
+        <p><em>No pending requests.</em></p>
+      <% } %>
+
+      <h2>Invite by username</h2>
+      <form method="POST" action="/group/<%= group.id %>/invite">
+        <input name="username" placeholder="Exact username" required>
+        <button>Invite</button>
+      </form>
+
+      <h2>Invite links</h2>
+      <p><a href="/invite-link/<%= group.id %>">Generate new invite link</a></p>
+      <% if (locals.inviteLinks && inviteLinks.length > 0) { %>
+        <ul>
+        <% inviteLinks.forEach(function(link) { %>
+          <li>Code: <code><%= link.code %></code> — <a href="/join/<%= link.code %>">/join/<%= link.code %></a> (expires <%= new Date(link.expires_at).toLocaleString() %>)</li>
+        <% }); %>
+        </ul>
+      <% } %>
+
+      <h2>Settings</h2>
+      <form method="POST" action="/group/<%= group.id %>/settings">
+        <p>Weekly quota (problems): <input name="weekly_quota" type="number" value="<%= group.weekly_quota %>" min="0"></p>
+        <p><button>Save</button></p>
+      </form>
+    <% } %>
+
+    <% if (locals.error) { %>
+      <p style="color:red"><%= error %></p>
+    <% } %>
+  <% } %>
+</body>
+</html>

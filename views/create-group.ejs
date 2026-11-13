@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abs - Create Group</title>
+</head>
+<body>
+  <h1>Create Group</h1>
+  <% if (locals.error) { %>
+    <p style="color:red"><%= error %></p>
+  <% } %>
+  <form method="POST">
+    <p><input name="name" placeholder="Group name" required></p>
+    <p>Weekly quota (problems): <input name="weekly_quota" type="number" value="0" min="0"></p>
+    <p><button>Create</button></p>
+  </form>
+  <p><a href="/">Back to home</a></p>
+</body>
+</html>

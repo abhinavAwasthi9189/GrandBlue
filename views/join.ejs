@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abs - Join Group</title>
+</head>
+<body>
+  <h1>Join Group</h1>
+  <% if (locals.error) { %>
+    <p style="color:red"><%= error %></p>
+  <% } %>
+  <% if (locals.success) { %>
+    <p style="color:green"><%= success %></p>
+    <p><a href="/group/<%= group_id %>">View group</a></p>
+  <% } %>
+  <p><a href="/">Back to home</a></p>
+</body>
+</html>
