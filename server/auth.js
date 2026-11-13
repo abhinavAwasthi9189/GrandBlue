@@ -1,23 +1,34 @@
 const argon2 = require('argon2');
+const rateLimit = require('./rateLimit');
+
+const loginRL = rateLimit({ max: 10, windowMs: 60_000 });
+const registerRL = rateLimit({ max: 5, windowMs: 60_000 });
 
 module.exports = async function (fastify, opts) {
+  const SIGNUP_CODE = process.env.SIGNUP_CODE || null;
+
   fastify.get('/register', async (req, reply) => {
     if (req.session.userId) return reply.redirect('/');
-    return reply.view('register');
+    return reply.view('register', { signupCodeRequired: !!SIGNUP_CODE });
   });
 
   fastify.post('/register', async (req, reply) => {
-    const { username, password } = req.body;
+    { const r = registerRL(req, reply); if (r !== true) return r; }
+
+    const { username, password, signup_code } = req.body;
+    if (SIGNUP_CODE && signup_code !== SIGNUP_CODE) {
+      return reply.view('register', { error: 'Invalid signup code', signupCodeRequired: true });
+    }
     if (!username || !password) {
-      return reply.view('register', { error: 'Username and password required' });
+      return reply.view('register', { error: 'Username and password required', signupCodeRequired: !!SIGNUP_CODE });
     }
     if (username.length < 2 || password.length < 4) {
-      return reply.view('register', { error: 'Username min 2 chars, password min 4 chars' });
+      return reply.view('register', { error: 'Username min 2 chars, password min 4 chars', signupCodeRequired: !!SIGNUP_CODE });
     }
 
     const existing = fastify.db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) {
-      return reply.view('register', { error: 'Username taken' });
+      return reply.view('register', { error: 'Username taken', signupCodeRequired: !!SIGNUP_CODE });
     }
 
     const hash = await argon2.hash(password);
@@ -35,6 +46,8 @@ module.exports = async function (fastify, opts) {
   });
 
   fastify.post('/login', async (req, reply) => {
+    { const r = loginRL(req, reply); if (r !== true) return r; }
+
     const { username, password } = req.body;
     if (!username || !password) {
       return reply.view('login', { error: 'Username and password required' });

@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%- include('_head') %>
   <title>abs - Register</title>
 </head>
 <body>
@@ -11,6 +10,9 @@
     <p style="color:red"><%= error %></p>
   <% } %>
   <form method="POST">
+    <% if (locals.signupCodeRequired) { %>
+      <p><input name="signup_code" placeholder="Signup code" required></p>
+    <% } %>
     <p><input name="username" placeholder="Username" autocomplete="username" required></p>
     <p><input name="password" type="password" placeholder="Password" autocomplete="new-password" required></p>
     <p><button>Register</button></p>

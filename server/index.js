@@ -1,7 +1,8 @@
 const Fastify = require('fastify');
 const path = require('path');
 
-const fastify = Fastify({ logger: true });
+const isSecureEnv = process.env.NODE_ENV === 'production' || !!process.env.TRUST_PROXY;
+const fastify = Fastify({ logger: true, trustProxy: isSecureEnv ? 1 : false });
 
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/cookie'));
@@ -24,7 +25,7 @@ const cookieSigner = new Signer(SESSION_SECRET, 'sha256');
 fastify.register(sessionPlugin, {
   secret: SESSION_SECRET,
   store: sessionStore,
-  cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
+  cookie: { secure: isSecureEnv, httpOnly: true, sameSite: 'Lax', maxAge: 7 * 24 * 60 * 60 * 1000 },
   saveUninitialized: false,
 });
 
@@ -67,7 +68,8 @@ fastify.get('/', async (req, reply) => {
 
 async function start() {
   try {
-    await fastify.listen({ port: 3000, host: '0.0.0.0' });
+    const port = parseInt(process.env.PORT, 10) || 3000;
+    await fastify.listen({ port, host: '0.0.0.0' });
     fastify.log.info(`server listening on ${fastify.server.address().port}`);
   } catch (err) {
     fastify.log.error(err);

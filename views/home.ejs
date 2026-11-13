@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%- include('_head') %>
   <title>abs - Home</title>
 </head>
 <body>
@@ -54,5 +53,55 @@
     <% }); %>
     </ul>
   <% } %>
+
+  <div id="install-prompt" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#6366f1;color:#fff;padding:16px;text-align:center;z-index:999">
+    <p style="margin:0 0 8px"><strong>Install abs</strong> for the best experience</p>
+    <button id="install-btn" style="background:#fff;color:#6366f1;border:none;padding:8px 24px;border-radius:6px;font-weight:600;cursor:pointer">Install</button>
+    <button id="install-dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:8px 24px;border-radius:6px;margin-left:8px;cursor:pointer">Not now</button>
+  </div>
+
+  <script>
+    (function() {
+      var deferredPrompt = null;
+      var promptEl = document.getElementById('install-prompt');
+      var installBtn = document.getElementById('install-btn');
+      var dismissBtn = document.getElementById('install-dismiss');
+
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        promptEl.style.display = 'block';
+      });
+
+      installBtn.addEventListener('click', function() {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then(function() { deferredPrompt = null; });
+        }
+        promptEl.style.display = 'none';
+      });
+
+      dismissBtn.addEventListener('click', function() {
+        promptEl.style.display = 'none';
+      });
+
+      // iOS fallback: show instructions if not in standalone mode and on iOS
+      var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isiOS && !window.navigator.standalone && !localStorage.getItem('pwa-dismissed')) {
+        promptEl.innerHTML =
+          '<p style="margin:0 0 8px"><strong>Install abs</strong><br>Tap <strong>Share</strong> <span style="font-size:20px">⎋</span> then <strong>Add to Home Screen</strong></p>' +
+          '<button id="install-dismiss" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);padding:8px 24px;border-radius:6px;cursor:pointer">Got it</button>';
+        promptEl.style.display = 'block';
+        var iOSdismiss = document.getElementById('install-dismiss');
+        iOSdismiss.addEventListener('click', function() {
+          promptEl.style.display = 'none';
+          localStorage.setItem('pwa-dismissed', '1');
+        });
+      }
+
+      if (window.navigator.standalone) { promptEl.style.display = 'none'; }
+    })();
+  </script>
 </body>
 </html>

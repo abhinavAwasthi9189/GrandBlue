@@ -36,6 +36,8 @@ module.exports = async function (fastify, opts) {
     const m = req.url.match(/^\/ws\/group\/(\d+)$/);
     if (!m) return;
     const groupId = Number(m[1]);
+    const isSecure = req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted;
+    req.url = (isSecure ? 'wss://' : 'ws://') + req.headers.host + req.url;
     const sessionCookie = parseCookies(req.headers.cookie).sessionId;
     if (!sessionCookie) { socket.destroy(); return; }
     const unsigned = opts.cookieSigner.unsign(sessionCookie);
