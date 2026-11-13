@@ -46,4 +46,4 @@ Set these env vars for push notifications:
 - No CSP/helmet headers.
 - Pause and stop are the same server-side action (both close the session); "resume" calls start.
 - Rate limiter resets on server restart (in-memory, not shared across processes).
-- No VAPID key generation helper — generate keys with `node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log('Public:',k.publicKey);console.log('Private:',k.privateKey)"`
+- No VAPID key generation helper — generate keys with `node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log('Public:',k.publicKey);console.log('Private:',k.privateKey)"`- Nudge/web push: built but unreliable. Fix later (check VAPID env, service worker updates, iPhone Home Screen install, server log on send).

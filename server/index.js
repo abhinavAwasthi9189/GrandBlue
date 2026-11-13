@@ -1,5 +1,17 @@
-const Fastify = require('fastify');
+const fs = require('fs');
 const path = require('path');
+const Fastify = require('fastify');
+
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+    const m = line.match(/^\s*(?:export\s+)?([A-Z_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) {
+      const v = m[2].replace(/^["']|["']$/g, '');
+      process.env[m[1]] = v;
+    }
+  }
+}
 
 const fastify = Fastify({
   logger: true,
