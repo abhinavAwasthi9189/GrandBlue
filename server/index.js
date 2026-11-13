@@ -38,6 +38,7 @@ fastify.decorate('db', require('./db'));
 fastify.register(require('./auth'));
 fastify.register(require('./groups'));
 fastify.register(require('./study'), { sessionStore, cookieSigner });
+fastify.register(require('./history'));
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');

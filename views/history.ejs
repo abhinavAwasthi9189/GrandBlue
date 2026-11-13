@@ -1,0 +1,51 @@
+<%
+function formatDur(ms) {
+  ms = Math.max(0, ms);
+  var s = Math.floor(ms / 1000);
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m > 0) return m + 'm ' + (s % 60) + 's';
+  return s + 's';
+}
+%><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abs - <%= group.name %> history</title>
+</head>
+<body>
+  <h1><%= group.name %> — study history</h1>
+  <p><a href="/group/<%= group.id %>">Back to group</a></p>
+
+  <% if (members.length === 0) { %>
+    <p><em>No members in this group.</em></p>
+  <% } else { %>
+    <table border="1" cellpadding="4">
+      <tr><th>Week (Mon–Sun, IST)</th>
+        <% members.forEach(function(name) { %><th><%= name %></th><% }); %>
+      </tr>
+      <% weeks.forEach(function(w) { %>
+        <tr>
+          <td><%= w.label %></td>
+          <% w.totals.forEach(function(t) { %>
+            <td><%= formatDur(t.total_ms) %></td>
+          <% }); %>
+        </tr>
+      <% }); %>
+    </table>
+
+    <p style="margin-top:12px">
+      <% if (page > 0) { %>
+        <a href="/group/<%= group.id %>/history?page=<%= page - 1 %>">‹ Newer weeks</a>
+      <% } else { %>
+        <span style="color:#999">‹ Newer weeks</span>
+      <% } %>
+      &nbsp;|&nbsp;
+      <a href="/group/<%= group.id %>/history?page=<%= page + 1 %>">Older weeks ›</a>
+    </p>
+    <p><em>Weeks run Monday 00:00 to Sunday 23:59 IST. Sessions crossing a week boundary are split.</em></p>
+  <% } %>
+</body>
+</html>

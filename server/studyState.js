@@ -1,4 +1,5 @@
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function getWeekStartIST(nowMs = Date.now()) {
   const ist = new Date(nowMs + IST_OFFSET);
@@ -6,6 +7,20 @@ function getWeekStartIST(nowMs = Date.now()) {
   ist.setUTCDate(ist.getUTCDate() - daysSinceMonday);
   ist.setUTCHours(0, 0, 0, 0);
   return ist.getTime() - IST_OFFSET;
+}
+
+function weekTotalForUser(db, userId, weekStart) {
+  const weekEnd = weekStart + WEEK_MS;
+  const now = Date.now();
+  return db.prepare(`
+    SELECT COALESCE(SUM(
+      MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)
+    ), 0) AS total
+    FROM sessions
+    WHERE user_id = ?
+      AND start_ms < ?
+      AND (end_ms IS NULL OR end_ms > ?)
+  `).get(now, weekEnd, weekStart, userId, weekEnd, weekStart).total;
 }
 
 function getMemberState(db, userId) {
@@ -16,21 +31,14 @@ function getMemberState(db, userId) {
   const last = db.prepare(
     "SELECT end_ms FROM sessions WHERE user_id = ? AND end_ms IS NOT NULL ORDER BY end_ms DESC LIMIT 1"
   ).get(userId);
-  const now = Date.now();
-  const weekTotalMs = db.prepare(`
-    SELECT COALESCE(SUM(
-      CASE WHEN end_ms IS NOT NULL THEN end_ms - start_ms ELSE ? - start_ms END
-    ), 0) AS total
-    FROM sessions WHERE user_id = ? AND start_ms >= ?
-  `).get(now, userId, getWeekStartIST(now)).total;
-
+  const nowMs = Date.now();
   return {
     userId: user.id,
     username: user.username,
     studying: !!active,
     startMs: active ? active.start_ms : null,
     lastEndMs: last ? last.end_ms : null,
-    weekTotalMs,
+    weekTotalMs: weekTotalForUser(db, userId, getWeekStartIST(nowMs)),
   };
 }
 
@@ -48,4 +56,22 @@ function getActiveMembers(db, groupId) {
   `).all(groupId);
 }
 
-module.exports = { getWeekStartIST, getMemberState, isActiveMember, getActiveMembers };
+function weekTotalsForGroup(db, groupId, weekStart, weekEnd) {
+  const now = Date.now();
+  return db.prepare(`
+    SELECT u.id, u.username,
+      COALESCE(SUM(
+        MIN(COALESCE(s.end_ms, ?), ?) - MAX(s.start_ms, ?)
+      ), 0) AS total_ms
+    FROM memberships m
+    JOIN users u ON u.id = m.user_id
+    LEFT JOIN sessions s ON s.user_id = u.id
+      AND s.start_ms < ?
+      AND (s.end_ms IS NULL OR s.end_ms > ?)
+    WHERE m.group_id = ? AND m.status = 'active'
+    GROUP BY u.id
+    ORDER BY u.username
+  `).all(now, weekEnd, weekStart, weekEnd, weekStart, groupId);
+}
+
+module.exports = { getWeekStartIST, WEEK_MS, weekTotalForUser, getMemberState, isActiveMember, getActiveMembers, weekTotalsForGroup };

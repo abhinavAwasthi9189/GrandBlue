@@ -1,4 +1,4 @@
-# STATUS — Build step 3 done
+# STATUS — Build step 4 done
 
 ## Run
 `node server/index.js` — listens on `0.0.0.0:3000`
@@ -9,8 +9,10 @@
 - `server/auth.js` — register, login, logout
 - `server/groups.js` — create group, invite, invite link, join, approve/reject, leave, remove, settings
 - `server/study.js` — WebSocket server, timer start/stop/heartbeat, stale session cleanup
-- `server/studyState.js` — shared functions: week-IST boundary, member state, active-member queries
-- `views/` — EJS templates
+- `server/studyState.js` — shared functions: week-IST boundary, boundary-aware week totals in SQL, member state, active-member queries
+- `server/history.js` — weekly history route with pagination
+- `scripts/seed-sessions.js` — fills fake sessions for past weeks to test history
+- `views/` — EJS templates (`history.ejs` added)
 
 ## Routes
 - `GET/POST /register`, `/login`, `GET /logout`
@@ -23,6 +25,7 @@
 - (**new**) `POST /group/:id/stop` — stop the current study session
 - (**new**) `POST /group/:id/heartbeat` — update last_heartbeat_ms
 - (**new**) `GET /ws/group/:id` — WebSocket upgrade (checks session cookie, must be active member)
+- (**new**) `GET /group/:id/history?page=N` — past weeks' totals, 10 weeks per page, newest first
 
 ## Tables
 - `users(id, username, password_hash, leetcode_username, created_at)`
@@ -31,10 +34,19 @@
 - `memberships(group_id, user_id, role, status, created_at)`
 - `invites(code, group_id, created_by, expires_at)`
 
+## Weekly totals
+- Weeks are Monday 00:00 to Sunday 23:59 Asia/Kolkata (`getWeekStartIST`).
+- Current week per member is shown live on the group page (WS `state`/`update`, `weekTotalMs`), using finished sessions **plus** any running one.
+- History page lists past weeks (newest first, 10/page) with each member's total.
+- Sessions crossing midnight or the Monday boundary are split in SQL: per week, contribution = `MAX(0, MIN(end_or_now, weekEnd) - MAX(start_ms, weekStart))`, computed directly in the query — no running-total table.
+
 ## WebSocket protocol
 - `state` — full member list sent on connect: `{type:"state", members:[{userId,username,studying,startMs,lastEndMs,weekTotalMs}]}`
 - `update` — single-member change: `{type:"update", member:{...}}`
 - Broadcast on timer start/stop/cleanup to all groups the user belongs to.
+
+## Seeding
+`node scripts/seed-sessions.js` — creates 1–4 fake sessions per member for the past 8 weeks (~20% cross the Monday boundary to exercise splitting).
 
 ## Known problems (unchanged)
 - Session cookie invalidated on server restart (dev secret changes). Set `SESSION_SECRET` env var.

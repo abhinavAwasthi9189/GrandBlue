@@ -21,6 +21,8 @@
     </p>
 
     <% if (membership.status === 'active') { %>
+      <p><a href="/group/<%= group.id %>/history">Study history (past weeks)</a></p>
+
       <h2>Study timer</h2>
       <p id="timer-status">Loading…</p>
       <p>
