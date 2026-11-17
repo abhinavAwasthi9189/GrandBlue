@@ -32,8 +32,6 @@
       <div>
         <div id="timer-status" style="font-weight:600">Loading…</div>
         <div id="timer-sub" style="font-size:var(--font-sm);color:var(--text-tertiary);margin-top:var(--space-xs)">
-          <span id="notif-status">Loading…</span>
-          <button id="notif-btn" class="btn btn-sm btn-ghost" type="button" style="display:none;font-size:inherit;color:var(--accent);padding:0">Turn on notifications</button>
         </div>
       </div>
       <div style="display:flex;gap:var(--space-sm);flex-shrink:0">
@@ -55,7 +53,11 @@
         <% var hash = 0; for (var i = 0; i < String(m.userId).length; i++) { hash = ((hash << 5) - hash) + String(m.userId).charCodeAt(i); hash |= 0; } %>
         <% var hue = ((hash % 360) + 360) % 360; %>
           <div class="list-row" data-user="<%= m.userId %>">
+          <% if (m.hasAvatar) { %>
+            <img class="avatar" src="/avatar/<%= m.userId %>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover">
+          <% } else { %>
           <div class="avatar" style="background:hsl(<%= hue %>, 55%, 50%)"><%= m.username.charAt(0).toUpperCase() %></div>
+          <% } %>
           <div class="row-main">
             <div class="row-label">
               <%= m.username %>
@@ -181,15 +183,6 @@
         return sec + 's';
       }
 
-      function fmtAgo(ms) {
-        if (ms == null) return 'never';
-        var s = Math.floor(ms / 1000);
-        if (s < 60) return s + 's ago';
-        var m = Math.floor(s / 60);
-        if (m < 60) return m + 'm ago';
-        return Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago';
-      }
-
       var heartbeatTimer = null;
 
       function startHeartbeat() {
@@ -209,8 +202,17 @@
       }
 
       function statusText(m) {
-        if (m.studying) return 'Studying ' + fmtDur(Date.now() - m.startMs);
-        return 'Last studied ' + fmtAgo(m.lastEndMs == null ? null : Date.now() - m.lastEndMs);
+        if (m.studying) return 'Studying';
+        return '';
+      }
+
+      function showToast(text) {
+        var t = document.createElement('div');
+        t.className = 'toast';
+        t.textContent = text;
+        t.style.cssText = 'position:fixed;bottom:calc(var(--tab-bar-height) + var(--safe-bottom) + var(--space-lg));left:50%;transform:translateX(-50%);z-index:2000;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-md);padding:var(--space-md) var(--space-lg);box-shadow:var(--shadow-lg);font-size:var(--font-sm);font-weight:500;max-width:90vw';
+        document.body.appendChild(t);
+        setTimeout(function() { t.remove(); }, 4000);
       }
 
       function render() {
@@ -247,6 +249,7 @@
           if (statusEl) statusEl.textContent = statusText(m);
           var weekEl = row.querySelector('.week');
           if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs) + ' this week';
+          row.classList.toggle('studying', m.studying);
           var nudgeBtn = row.querySelector('.nudge-btn');
           if (nudgeBtn) nudgeBtn.style.display = m.studying ? 'none' : 'inline-flex';
           var timerEl = row.querySelector('.live-timer');
@@ -301,6 +304,8 @@
               if (members[i].userId === msg.member.userId) { members[i] = msg.member; found = true; break; }
             }
             if (!found) members.push(msg.member);
+          } else if (msg.type === 'nudge' && msg.targetUserId === ME_ID) {
+            showToast(msg.fromUsername + ' nudged you!', 'nudge');
           }
           render();
         };
@@ -333,50 +338,6 @@
             .catch(function() {});
         });
       });
-
-      // Notifications
-      var notifStatus = document.getElementById('notif-status');
-      var notifBtn = document.getElementById('notif-btn');
-      var vapidAvailable = false;
-
-      function updateNotifUI(subscribed) {
-        if (!('Notification' in window)) { notifStatus.textContent = 'Not supported'; notifBtn.style.display = 'none'; return; }
-        if (!vapidAvailable) { notifStatus.textContent = 'Push not configured'; notifBtn.style.display = 'none'; return; }
-        if (Notification.permission === 'denied') { notifStatus.textContent = 'Blocked'; notifBtn.style.display = 'none'; }
-        else if (subscribed) { notifStatus.textContent = 'Notifications on'; notifBtn.style.display = 'none'; }
-        else { notifStatus.textContent = ''; notifBtn.style.display = 'inline'; }
-      }
-
-      notifBtn.addEventListener('click', function() {
-        if (Notification.permission === 'granted') subscribeForPush();
-        else Notification.requestPermission().then(function(p) { if (p === 'granted') subscribeForPush(); updateNotifUI(false); });
-      });
-
-      function subscribeForPush() {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-        navigator.serviceWorker.register('/sw.js').then(function(reg) {
-          fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
-            if (!d.key) return;
-            vapidAvailable = true;
-            var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
-            while (raw.length % 4) raw += '=';
-            var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
-            reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
-              .then(function(sub) {
-                fetch('/push/subscribe', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
-                }).then(function() { updateNotifUI(true); }).catch(function() {});
-              }).catch(function() {});
-          });
-        });
-      }
-
-      fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
-        vapidAvailable = !!d.key;
-        updateNotifUI(false);
-      }).catch(function() { notifStatus.textContent = 'Unavailable'; });
 
       setInterval(render, 1000);
       render();

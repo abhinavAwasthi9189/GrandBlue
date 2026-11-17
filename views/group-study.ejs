@@ -179,7 +179,9 @@ function hueFromId(id) {
       row.style.cssText = 'display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) 0';
       row.innerHTML =
         '<span style="width:20px;text-align:center;font-weight:600;font-size:var(--font-sm);color:var(--text-secondary)">' + (idx + 1) + '</span>' +
-        '<div class="avatar avatar-sm" style="background:hsl(' + hue + ',55%,50%);width:28px;height:28px;font-size:11px">' + m.username.charAt(0).toUpperCase() + '</div>' +
+        (m.hasAvatar
+          ? '<img src="/avatar/' + m.userId + '" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+          : '<div class="avatar avatar-sm" style="background:hsl(' + hue + ',55%,50%);width:28px;height:28px;font-size:11px">' + m.username.charAt(0).toUpperCase() + '</div>') +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-weight:' + (isMe ? '700' : '500') + ';font-size:var(--font-sm)">' + m.username + (isMe ? ' <span style="color:var(--text-tertiary);font-weight:400">(you)</span>' : '') + '</div>' +
           '<div style="background:var(--bg-tertiary);border-radius:var(--radius-full);height:6px;overflow:hidden;margin-top:4px">' +

@@ -31,6 +31,14 @@ module.exports = async function (fastify, opts) {
     return reply.send({ key: VAPID_PUBLIC_KEY || '' });
   });
 
+  fastify.get('/push/status', async (req, reply) => {
+    if (!req.session.userId) return reply.send({ subscribed: false });
+    const sub = fastify.db.prepare(
+      'SELECT 1 FROM push_subscriptions WHERE user_id = ? LIMIT 1'
+    ).get(req.session.userId);
+    return reply.send({ subscribed: !!sub, vapidConfigured: !!VAPID_CFG });
+  });
+
   fastify.post('/push/subscribe', async (req, reply) => {
     if (!requireAuth(req, reply)) return;
     const { endpoint, keys } = req.body;
@@ -90,10 +98,25 @@ module.exports = async function (fastify, opts) {
       'INSERT INTO nudges (from_user, to_user, group_id, created_at) VALUES (?, ?, ?, ?)'
     ).run(senderId, targetId, groupId, now);
 
+    // Real-time nudge via WebSocket
+    if (typeof fastify.broadcastToGroup === 'function') {
+      fastify.broadcastToGroup(groupId, {
+        type: 'nudge',
+        fromUserId: senderId,
+        fromUsername: req.session.username || 'Someone',
+        targetUserId: targetId,
+      });
+    }
+
     if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
       const subs = db.prepare(
         'SELECT endpoint, keys_json FROM push_subscriptions WHERE user_id = ?'
       ).all(targetId);
+
+      fastify.log.info('nudge: sending push to user %d (%d subscriptions)', targetId, subs.length);
+      if (subs.length === 0) {
+        fastify.log.warn('nudge: no push subscriptions for user %d', targetId);
+      }
 
       const payload = JSON.stringify({
         title: 'abs',

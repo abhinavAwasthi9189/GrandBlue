@@ -112,7 +112,7 @@ function startPoller(fastify) {
 function getDailyLeetwars(db, groupId, weekStart) {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const members = db.prepare(`
-    SELECT u.id, u.username, u.leetcode_username
+    SELECT u.id, u.username, u.leetcode_username, u.avatar
     FROM memberships m JOIN users u ON u.id = m.user_id
     WHERE m.group_id = ? AND m.status = 'active'
     ORDER BY u.username
@@ -134,12 +134,12 @@ function getDailyLeetwars(db, groupId, weekStart) {
     });
     days.push({ label, data: dayData });
   }
-  return { days, members };
+  return { days, members: members.map(m => ({ userId: m.id, username: m.username, leetcode_username: m.leetcode_username, hasAvatar: !!m.avatar })) };
 }
 
 function getLeaderboard(db, groupId, weekStart, weekEnd) {
   return db.prepare(`
-    SELECT u.id, u.username, u.leetcode_username,
+    SELECT u.id, u.username, u.leetcode_username, u.avatar,
       COALESCE(SUM(CASE sp.difficulty WHEN 'Easy' THEN 10 WHEN 'Medium' THEN 25 WHEN 'Hard' THEN 50 END), 0) AS xp,
       COUNT(sp.slug) AS solved_count
     FROM memberships m
@@ -232,9 +232,9 @@ module.exports = async function (fastify, opts) {
     const behind = [];
     for (const e of leaderboard) {
       if (e.leetcode_username && e.solved_count < quota) {
-        behind.push({ id: e.id, username: e.username, solved: e.solved_count, owed: quota - e.solved_count, notLinked: false });
+        behind.push({ id: e.id, username: e.username, avatar: e.avatar, solved: e.solved_count, owed: quota - e.solved_count, notLinked: false });
       } else if (!e.leetcode_username) {
-        behind.push({ id: e.id, username: e.username, solved: 0, owed: quota, notLinked: true });
+        behind.push({ id: e.id, username: e.username, avatar: e.avatar, solved: 0, owed: quota, notLinked: true });
       }
     }
 

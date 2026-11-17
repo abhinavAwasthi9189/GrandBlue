@@ -24,7 +24,7 @@ function weekTotalForUser(db, userId, weekStart) {
 }
 
 function getMemberState(db, userId) {
-  const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(userId);
   const active = db.prepare(
     "SELECT start_ms FROM sessions WHERE user_id = ? AND end_ms IS NULL ORDER BY start_ms DESC LIMIT 1"
   ).get(userId);
@@ -35,6 +35,7 @@ function getMemberState(db, userId) {
   return {
     userId: user.id,
     username: user.username,
+    hasAvatar: !!user.avatar,
     studying: !!active,
     startMs: active ? active.start_ms : null,
     lastEndMs: last ? last.end_ms : null,

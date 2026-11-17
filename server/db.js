@@ -17,6 +17,7 @@ db.exec(`
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     leetcode_username TEXT,
+    avatar INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
 
@@ -92,5 +93,8 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_solved_problems_user_time ON solved_problems(user_id, solved_at_ms);
 `);
+
+// Migration: add avatar column for existing databases
+try { db.exec('ALTER TABLE users ADD COLUMN avatar INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
 
 module.exports = db;

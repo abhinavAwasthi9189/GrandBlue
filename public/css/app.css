@@ -25,7 +25,18 @@ input, select, textarea, button { font-family: inherit; font-size: var(--font-ba
   box-shadow: var(--shadow);
 }
 
-/* === Button === */
+.list-row .row-main .week { font-weight: 700; }
+
+/* List row for actively studying members — highlight with a subtle tint */
+.list-row.studying { background: var(--accent-light); }
+
+/* Crop dialog */
+#crop-stage { background: var(--bg-tertiary); border-radius: 50%; overflow: hidden; }
+#crop-canvas { cursor: grab; touch-action: none; }
+#crop-canvas:active { cursor: grabbing; }
+input[type=range] { accent-color: var(--accent); height: 6px; border-radius: var(--radius-full); background: var(--bg-tertiary); outline: none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-sm);
   padding: 10px 20px; border: none; border-radius: var(--radius-md);
@@ -120,6 +131,9 @@ input, select, textarea, button { font-family: inherit; font-size: var(--font-ba
 }
 .fab:active { transform: scale(0.92); }
 .fab:hover { background: var(--accent-hover); }
+
+/* Desktop new-group button hidden on mobile */
+.desktop-new-btn { display: none; }
 
 /* === Progress Bar === */
 .progress-bar {

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const Fastify = require('fastify');
 const studyState = require('./studyState');
 
@@ -35,6 +36,9 @@ if (staticDirs.length > 0) {
   });
 }
 
+const AVATAR_DIR = path.join(__dirname, '..', 'data', 'avatars');
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
 const { Signer } = require('@fastify/cookie');
 const sessionPlugin = require('@fastify/session');
 if (!process.env.SESSION_SECRET) {
@@ -66,6 +70,31 @@ fastify.register(require('./history'));
 fastify.register(require('./push'));
 fastify.register(require('./leetwars'));
 fastify.register(require('./stats'));
+
+// Serve avatar images
+fastify.get('/avatar/:userId', async (req, reply) => {
+  const filePath = path.join(AVATAR_DIR, req.params.userId + '.png');
+  if (fs.existsSync(filePath)) {
+    return reply.type('image/png').send(fs.readFileSync(filePath));
+  }
+  return reply.code(404).send('Not found');
+});
+
+// Upload avatar (accepts base64 data URL)
+fastify.post('/avatar', async (req, reply) => {
+  if (!req.session.userId) return reply.code(401).send({ ok: false });
+  const { image } = req.body;
+  if (!image || !image.startsWith('data:image/')) {
+    return reply.send({ ok: false, error: 'Invalid image data' });
+  }
+  const matches = image.match(/^data:image\/(\w+);base64,(.+)$/);
+  if (!matches) return reply.send({ ok: false, error: 'Unsupported format' });
+  const buffer = Buffer.from(matches[2], 'base64');
+  const filePath = path.join(AVATAR_DIR, req.session.userId + '.png');
+  fs.writeFileSync(filePath, buffer);
+  fastify.db.prepare('UPDATE users SET avatar = 1 WHERE id = ?').run(req.session.userId);
+  return reply.send({ ok: true });
+});
 
 fastify.get('/', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
@@ -120,12 +149,12 @@ fastify.get('/you', async (req, reply) => {
   if (!req.session.userId) return reply.redirect('/login');
   const db = fastify.db;
   const userId = req.session.userId;
-  const user = db.prepare('SELECT id, username, leetcode_username FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, username, leetcode_username, avatar FROM users WHERE id = ?').get(userId);
   const membershipCount = db.prepare(
     "SELECT COUNT(*) AS cnt FROM memberships WHERE user_id = ? AND status = 'active'"
   ).get(userId).cnt;
   const hasLeetcode = !!user.leetcode_username;
-  return reply.view('you', { session: req.session, username: user.username, membershipCount, hasLeetcode, leetcodeUsername: user.leetcode_username || '' });
+  return reply.view('you', { session: req.session, username: user.username, membershipCount, hasLeetcode, leetcodeUsername: user.leetcode_username || '', hasAvatar: !!user.avatar });
 });
 
 fastify.get('/change-password', async (req, reply) => {

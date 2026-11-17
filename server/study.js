@@ -71,6 +71,8 @@ module.exports = async function (fastify, opts) {
     for (const ws of set) if (ws.readyState === 1) ws.send(data);
   }
 
+  fastify.decorate('broadcastToGroup', broadcast);
+
   function broadcastUser(userId) {
     const groups = db.prepare(
       "SELECT group_id FROM memberships WHERE user_id = ? AND status = 'active'"
@@ -126,7 +128,7 @@ module.exports = async function (fastify, opts) {
 
   function dailyTotalsForGroup(db, groupId, weekStart) {
     const members = db.prepare(`
-      SELECT u.id, u.username
+      SELECT u.id, u.username, u.avatar
       FROM memberships m JOIN users u ON u.id = m.user_id
       WHERE m.group_id = ? AND m.status = 'active'
       ORDER BY u.username
@@ -155,7 +157,7 @@ module.exports = async function (fastify, opts) {
 
       days.push({ label: dayLabel, data: dayData });
     }
-    return { days, members };
+    return { days, members: members.map(m => ({ userId: m.id, username: m.username, hasAvatar: !!m.avatar })) };
   }
 
   fastify.get('/api/group/:id/study/daily', async (req, reply) => {

@@ -104,7 +104,11 @@ function ago(ms) {
           <% var barPct = Math.round(e.xp / leaderXp * 100); %>
           <div style="display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) 0">
             <span style="width:20px;text-align:center;font-weight:600;font-size:var(--font-sm);color:var(--text-secondary)"><%= i + 1 %></span>
+            <% if (e.avatar) { %>
+              <img src="/avatar/<%= e.id %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">
+            <% } else { %>
             <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= e.username.charAt(0).toUpperCase() %></div>
+            <% } %>
             <div style="flex:1;min-width:0">
               <div style="font-weight:<%= isMe ? '700' : '500' %>;font-size:var(--font-sm)">
                 <%= e.username %><% if (isMe) { %> <span style="color:var(--text-tertiary);font-weight:400">(you)</span><% } %>
@@ -142,7 +146,11 @@ function ago(ms) {
           <% behind.forEach(function(b) { %>
             <div class="list-row">
               <% var hue = hueFromId(b.id); %>
-              <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= b.username.charAt(0).toUpperCase() %></div>
+              <% if (b.avatar) { %>
+              <img src="/avatar/<%= b.id %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">
+            <% } else { %>
+            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= b.username.charAt(0).toUpperCase() %></div>
+            <% } %>
               <div class="row-main">
                 <div class="row-label" style="font-size:var(--font-sm)"><%= b.username %></div>
                 <div class="row-sub">
@@ -164,7 +172,7 @@ function ago(ms) {
       <!-- Recent solves feed -->
       <div class="card">
         <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Recent solves</h2>
-        <% var allSolves = []; leaderboard.forEach(function(e) { (solvesMap[e.id] || []).forEach(function(s) { allSolves.push({ userId: e.id, username: e.username, slug: s.slug, difficulty: s.difficulty, solvedAt: s.solved_at_ms }); }); }); %>
+        <% var allSolves = []; leaderboard.forEach(function(e) { (solvesMap[e.id] || []).forEach(function(s) { allSolves.push({ userId: e.id, username: e.username, avatar: e.avatar, slug: s.slug, difficulty: s.difficulty, solvedAt: s.solved_at_ms }); }); }); %>
         <% allSolves.sort(function(a, b) { return b.solvedAt - a.solvedAt; }); %>
         <% if (allSolves.length === 0) { %>
           <div class="empty-state"><div class="empty-state-text">No solves this week yet.</div></div>
@@ -173,7 +181,11 @@ function ago(ms) {
             <% var hue = hueFromId(s.userId); %>
             <% var diffClass = s.difficulty === 'Easy' ? 'chip-accent' : s.difficulty === 'Medium' ? 'chip-warning' : 'chip-danger'; %>
             <div class="list-row" style="font-size:var(--font-sm)">
-              <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:24px;height:24px;font-size:10px"><%= s.username.charAt(0).toUpperCase() %></div>
+              <% if (s.avatar) { %>
+              <img src="/avatar/<%= s.userId %>" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
+            <% } else { %>
+            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:24px;height:24px;font-size:10px"><%= s.username.charAt(0).toUpperCase() %></div>
+            <% } %>
               <div class="row-main">
                 <div class="row-label">
                   <strong><%= s.username %></strong> solved

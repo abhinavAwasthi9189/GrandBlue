@@ -7,7 +7,11 @@
 <div id="you-page">
   <!-- Header -->
   <div style="display:flex;align-items:center;gap:var(--space-lg);margin-bottom:var(--space-xl);padding:var(--space-lg) 0">
+    <% if (locals.hasAvatar) { %>
+      <img src="/avatar/<%= session.userId %>" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;flex-shrink:0">
+    <% } else { %>
     <div class="avatar avatar-lg" style="background:hsl(<%= hue %>, 55%, 50%);width:64px;height:64px;font-size:var(--font-2xl)"><%= username.charAt(0).toUpperCase() %></div>
+    <% } %>
     <div>
       <div style="font-size:var(--font-xl);font-weight:700"><%= username %></div>
       <div style="font-size:var(--font-sm);color:var(--text-secondary)">Member of <%= membershipCount %> group<%= membershipCount !== 1 ? 's' : '' %></div>
@@ -263,29 +267,23 @@
       var els = ['stat-today', 'stat-week', 'stat-streak', 'stat-best'];
       els.forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.textContent = 'Error';
+        if (el) el.textContent = '-';
       });
     });
 
   // --- Notifications in settings ---
   var notifStatus = document.getElementById('notif-status-text');
   var notifBtn = document.getElementById('notif-settings-btn');
-  var vapidOk = false;
 
-  fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
-    vapidOk = !!d.key;
-    updateNotifUI();
-  }).catch(function() { notifStatus.textContent = 'Unavailable'; });
-
-  function updateNotifUI() {
-    if (!('Notification' in window)) { notifStatus.textContent = 'Not supported'; return; }
-    if (!vapidOk) { notifStatus.textContent = 'Push not configured'; return; }
+  function updateNotifUI(state) {
+    if (!('Notification' in window)) { notifStatus.textContent = 'Not supported'; notifBtn.style.display = 'none'; return; }
+    if (!state.vapidConfigured) { notifStatus.textContent = 'Push not configured'; notifBtn.style.display = 'none'; return; }
     if (Notification.permission === 'denied') {
-      notifStatus.textContent = 'Blocked — enable in browser settings';
+      notifStatus.textContent = 'Blocked';
       notifBtn.style.display = 'none';
-    } else if (Notification.permission === 'granted') {
+    } else if (state.subscribed) {
       notifStatus.textContent = 'On';
-      notifBtn.textContent = 'Re-subscribe';
+      notifBtn.textContent = 'Turn off';
       notifBtn.style.display = 'inline-flex';
     } else {
       notifStatus.textContent = 'Off';
@@ -294,21 +292,52 @@
     }
   }
 
+  fetch('/push/status').then(function(r) { return r.json(); }).then(function(state) {
+    updateNotifUI(state);
+    // Diagnostic: log connection info
+    console.log('abs: protocol=' + location.protocol + ' push=' + (state.vapidConfigured ? 'ready' : 'no-vapid') + ' subscribed=' + state.subscribed);
+  }).catch(function() { notifStatus.textContent = 'Unavailable'; });
+
   if (notifBtn) {
     notifBtn.addEventListener('click', function() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      var turningOn = notifBtn.textContent === 'Turn on';
+      if (!turningOn) {
+        navigator.serviceWorker.ready.then(function(reg) {
+          reg.pushManager.getSubscription().then(function(sub) {
+            if (!sub) return;
+            fetch('/push/unsubscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+            }).then(function() {
+              sub.unsubscribe();
+              updateNotifUI({ subscribed: false, vapidConfigured: true });
+            }).catch(function() {});
+          });
+        });
+        return;
+      }
       if (Notification.permission !== 'granted') {
-        Notification.requestPermission().then(function(p) { if (p === 'granted') subscribe(); updateNotifUI(); });
+        Notification.requestPermission().then(function(p) {
+          if (p === 'granted') doSubscribe();
+        });
       } else {
-        subscribe();
+        doSubscribe();
       }
     });
   }
 
-  function subscribe() {
+  function doSubscribe() {
+    // Check secure context
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      notifStatus.textContent = 'HTTPS required — use https://friday.tailc9d480.ts.net';
+      notifBtn.style.display = 'inline-flex';
+      return;
+    }
     navigator.serviceWorker.register('/sw.js').then(function(reg) {
       fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
-        if (!d.key) return;
+        if (!d.key) { notifStatus.textContent = 'Push not configured'; return; }
         var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
         while (raw.length % 4) raw += '=';
         var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
@@ -318,10 +347,15 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
-            }).then(function() { updateNotifUI(); }).catch(function() {});
-          }).catch(function() {});
-      });
-    });
+            }).then(function(r) { return r.json(); }).then(function() {
+              updateNotifUI({ subscribed: true, vapidConfigured: true });
+            }).catch(function() { notifStatus.textContent = 'Server error'; });
+          }).catch(function(e) {
+            notifStatus.textContent = 'Subscription failed: ' + (e.message || 'unknown');
+            notifBtn.style.display = 'inline-flex';
+          });
+        }).catch(function() { notifStatus.textContent = 'VAPID fetch failed'; });
+      }).catch(function() { notifStatus.textContent = 'SW registration failed'; });
   }
 
   // --- Install prompt ---
@@ -347,6 +381,144 @@
       alert('Tap Share → Add to Home Screen');
     };
   }
+// --- Profile photo (long-press / click crop) ---
+  var avatarWrapper = document.querySelector('#you-page img[src^="/avatar/"]') || document.querySelector('#you-page .avatar.avatar-lg') || document.querySelector('#you-page .avatar');
+  var fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'image/*';
+
+  // Support both long-press (mobile) and click (desktop)
+  var longPressTimer = null;
+  var suppressClick = false;
+  if (avatarWrapper) {
+    avatarWrapper.addEventListener('touchstart', function() {
+      suppressClick = false;
+      longPressTimer = setTimeout(function() { suppressClick = true; fileInput.click(); }, 500);
+    });
+    avatarWrapper.addEventListener('touchend', function() { clearTimeout(longPressTimer); });
+    avatarWrapper.addEventListener('touchmove', function() { clearTimeout(longPressTimer); });
+    avatarWrapper.addEventListener('click', function() { if (!suppressClick) fileInput.click(); });
+  }
+
+  var cropDialog = document.getElementById('crop-dialog');
+  var cropCanvas = document.getElementById('crop-canvas');
+  var cropCtx = cropCanvas.getContext('2d');
+  var zoomSlider = document.getElementById('zoom-slider');
+
+  var cropImg = null;       // HTMLImageElement after load
+  var cropOffsetX = 0, cropOffsetY = 0;
+  var cropZoom = 1;
+  var dragStartX = 0, dragStartY = 0;
+  var isDragging = false;
+
+  function drawCrop() {
+    if (!cropImg) return;
+    var s = 256;
+    cropCanvas.width = s; cropCanvas.height = s;
+    cropCtx.clearRect(0, 0, s, s);
+    var scale = Math.max(s / cropImg.width, s / cropImg.height) * cropZoom;
+    var dw = cropImg.width * scale;
+    var dh = cropImg.height * scale;
+    var dx = (s - dw) / 2 + cropOffsetX;
+    var dy = (s - dh) / 2 + cropOffsetY;
+    cropCtx.beginPath();
+    cropCtx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+    cropCtx.clip();
+    cropCtx.drawImage(cropImg, dx, dy, dw, dh);
+  }
+
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function() {
+      var img = new Image();
+      img.onload = function() {
+        cropImg = img;
+        cropOffsetX = 0; cropOffsetY = 0;
+        cropZoom = 1;
+        zoomSlider.value = 1;
+        cropDialog.style.display = 'flex';
+        drawCrop();
+      };
+      img.src = reader.result;
+    };
+    reader.onerror = function() {};
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+  });
+
+  // Zoom slider
+  zoomSlider.addEventListener('input', function() {
+    cropZoom = parseFloat(zoomSlider.value);
+    drawCrop();
+  });
+
+  // Drag to pan
+  cropCanvas.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    dragStartX = e.clientX - cropOffsetX;
+    dragStartY = e.clientY - cropOffsetY;
+    cropCanvas.style.cursor = 'grabbing';
+  });
+  cropCanvas.addEventListener('touchstart', function(e) {
+    var t = e.touches[0];
+    isDragging = true;
+    dragStartX = t.clientX - cropOffsetX;
+    dragStartY = t.clientY - cropOffsetY;
+  });
+  function onDrag(e) {
+    if (!isDragging) return;
+    var cx, cy;
+    if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+    else { cx = e.clientX; cy = e.clientY; }
+    cropOffsetX = cx - dragStartX;
+    cropOffsetY = cy - dragStartY;
+    drawCrop();
+  }
+  cropCanvas.addEventListener('mousemove', onDrag);
+  cropCanvas.addEventListener('touchmove', onDrag);
+  function endDrag() { isDragging = false; cropCanvas.style.cursor = 'grab'; }
+  cropCanvas.addEventListener('mouseup', endDrag);
+  cropCanvas.addEventListener('touchend', endDrag);
+
+  // Save
+  document.getElementById('crop-save').addEventListener('click', function() {
+    var dataUrl = cropCanvas.toDataURL();
+    fetch('/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok) { location.reload(); }
+    }).catch(function() {});
+  });
+
+  function closeCrop() { cropDialog.style.display = 'none'; cropImg = null; }
+  document.getElementById('crop-close').addEventListener('click', closeCrop);
+  document.getElementById('crop-cancel').addEventListener('click', closeCrop);
+  cropDialog.addEventListener('click', function(e) { if (e.target === cropDialog) closeCrop(); });
+
 })();
 </script>
+
+<!-- Crop dialog -->
+<div class="dialog-overlay" id="crop-dialog" style="display:none">
+  <div class="dialog-content" style="max-width:360px">
+    <div class="dialog-header">
+      <div class="dialog-title">Set profile photo</div>
+      <button class="dialog-close" id="crop-close">✕</button>
+    </div>
+    <div style="width:256px;height:256px;margin:0 auto var(--space-md);border-radius:50%;overflow:hidden;position:relative;background:var(--bg-tertiary)" id="crop-stage">
+      <canvas id="crop-canvas" width="256" height="256" style="position:absolute;top:0;left:0;width:256px;height:256px;cursor:grab;touch-action:none"></canvas>
+    </div>
+    <div style="margin-bottom:var(--space-md)">
+      <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--accent)">
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" id="crop-cancel">Cancel</button>
+      <button class="btn btn-primary" id="crop-save" style="flex:1">Save</button>
+    </div>
+  </div>
+</div>
+
 <%- include('_layout_close') %>

@@ -1,4 +1,32 @@
-# STATUS — Build step 6 done + systemd service + UI step 1 (foundation) + UI step 5 (Study tab) + UI step 6 (Leetwars tab) + UI step 7 (Desktop layout) + UI step 8 (Polish)
+# STATUS — Build step 6 done + systemd service + all UI steps + Avatar upload + Nudge real-time + Members tab cleanup
+
+## Changes
+
+### Avatar upload (long-press on You page avatar)
+- New column `avatar` on users table (INTEGER DEFAULT 0) + migration for existing DBs.
+- `POST /avatar` accepts a base64 data URL, saves as `data/avatars/{userId}.jpg`.
+- `GET /avatar/:userId` serves the image or 404.
+- `avatar` field included in `getMemberState()` (studyState.js) and all member queries (study.js, leetwars.js).
+- You page: conditional avatar rendering — `<img>` if set, colored circle + initial otherwise.
+- Long-press (mobile) or click (desktop) opens file picker → crop dialog with drag-to-pan, zoom slider, circular preview → saves to server.
+- Member list (group.ejs), study leaderboard (group-study.ejs), leetwars leaderboard/behind/solves (leetwars.ejs) all render custom avatars.
+
+### Members tab cleanup
+- Removed "last studied X ago" from member rows — only shows weekly total.
+- Weekly total text is bold (`.week { font-weight: 700 }`).
+- Studying members sorted first (already existed), now also get `.studying` class with accent-tinted background.
+
+### Notification prompts removed from group page
+- Notification permission prompt / "Turn on notifications" button removed from group.ejs entirely.
+- Notification management now only in You tab → Settings → Notifications.
+
+### Nudge real-time via WebSocket
+- `study.js` exposes `broadcastToGroup` via fastify.decorate.
+- `push.js` broadcasts `{ type: 'nudge', fromUsername, targetUserId }` to the group over WebSocket after recording a nudge.
+- `group.ejs` WebSocket handler shows a toast ("{user} nudged you!") when the target receives a nudge.
+
+### Stats display fix
+- Stats fetch error catch now shows "-" instead of "Error" for new users with no data.
 
 ## Run
 `node server/index.js` — listens on `0.0.0.0:3000` (or `$PORT`)
