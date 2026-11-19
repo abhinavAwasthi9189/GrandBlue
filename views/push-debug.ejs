@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<%- include('_layout', { title: 'Push Debug', page: 'you' }) %>
+<style>
+  pre { background:var(--bg-tertiary); padding:var(--space-md); border-radius:var(--radius-md); overflow-x:auto; font-size:var(--font-sm); margin-bottom:var(--space-md) }
+  .dbg-row { display:flex; justify-content:space-between; padding:var(--space-sm) 0; border-bottom:1px solid var(--border); font-size:var(--font-sm) }
+  .dbg-label { color:var(--text-secondary) }
+  .dbg-value { font-family:var(--font-mono); font-weight:600 }
+  .ok { color:var(--success) }
+  .fail { color:var(--danger) }
+  .warn { color:var(--warning) }
+  .btn-row { display:flex; gap:var(--space-sm); flex-wrap:wrap; margin-bottom:var(--space-lg) }
+  #test-results { margin-top:var(--space-md) }
+  #test-results .sub-row { display:flex; gap:var(--space-sm); font-size:var(--font-sm); padding:4px 0 }
+  #test-results .sub-row code { flex:1 }
+</style>
+</head>
+<div style="padding-bottom:var(--space-xl)">
+  <h1 style="font-size:var(--font-xl);font-weight:700;margin-bottom:var(--space-lg)">Push Debug</h1>
+
+  <div class="card" style="margin-bottom:var(--space-lg)">
+    <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Diagnostics</h2>
+    <div id="diag"></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-turn-on">Turn on notifications</button>
+    <button class="btn btn-secondary" id="btn-resubscribe">Re-subscribe</button>
+    <button class="btn btn-secondary" id="btn-test">Send test notification to me</button>
+  </div>
+
+  <div id="test-results"></div>
+</div>
+
+<script>
+(function() {
+  var ME_ID = <%= session.userId %>;
+  var diagEl = document.getElementById('diag');
+  var testResults = document.getElementById('test-results');
+  var btnTurnOn = document.getElementById('btn-turn-on');
+  var btnResub = document.getElementById('btn-resubscribe');
+  var btnTest = document.getElementById('btn-test');
+
+  function row(label, value, cls) {
+    return '<div class="dbg-row"><span class="dbg-label">' + label + '</span><span class="dbg-value ' + (cls || '') + '">' + value + '</span></div>';
+  }
+
+  function refresh() {
+    var lines = [];
+
+    // Notification.permission
+    lines.push(row('Notification.permission', Notification.permission, Notification.permission === 'granted' ? 'ok' : 'fail'));
+
+    // Display mode (standalone = installed PWA)
+    var standalone = window.matchMedia('(display-mode: standalone)').matches;
+    lines.push(row('Installed (display-mode: standalone)', String(standalone), standalone ? 'ok' : 'warn'));
+
+    // Service worker state
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration('/sw.js').then(function(reg) {
+        if (reg) {
+          lines.push(row('SW registered', 'yes', 'ok'));
+          lines.push(row('SW scope', reg.scope));
+          lines.push(row('SW script URL', reg.active ? reg.active.scriptURL : (reg.waiting ? reg.waiting.scriptURL : '?')));
+          lines.push(row('SW state', reg.active ? 'active' : reg.waiting ? 'waiting' : 'installing'));
+          lines.push(row('SW version', reg.active ? (reg.active.scriptURL + '?v=' + Date.now()) : (reg.waiting ? reg.waiting.scriptURL : '?')));
+
+          // Push subscription
+          reg.pushManager.getSubscription().then(function(sub) {
+            if (sub) {
+              var epUrl = new URL(sub.endpoint);
+              lines.push(row('Push subscription', 'yes', 'ok'));
+              lines.push(row('Endpoint host', epUrl.hostname));
+
+              // Check if server has it
+              fetch('/push/subscriptions-for-user').then(function(r) { return r.json(); }).then(function(d) {
+                var found = d.endpoints.some(function(ep) { return ep.indexOf(epUrl.hostname) > -1; });
+                lines.push(row('Saved on server', found ? 'yes - ' + d.count + ' sub(s)' : 'no', found ? 'ok' : 'fail'));
+                diagEl.innerHTML = lines.join('');
+              }).catch(function() { diagEl.innerHTML = lines.join(''); });
+            } else {
+              lines.push(row('Push subscription', 'none', 'fail'));
+              lines.push(row('Endpoint host', '-'));
+              lines.push(row('Saved on server', '-'));
+              diagEl.innerHTML = lines.join('');
+            }
+          }).catch(function() {
+            lines.push(row('Push subscription', 'error querying', 'fail'));
+            diagEl.innerHTML = lines.join('');
+          });
+        } else {
+          lines.push(row('SW registered', 'no', 'fail'));
+          lines.push(row('SW scope', '-'));
+          lines.push(row('SW script URL', '-'));
+          lines.push(row('SW state', '-'));
+          lines.push(row('SW version', '-'));
+          lines.push(row('Push subscription', '-'));
+          lines.push(row('Endpoint host', '-'));
+          lines.push(row('Saved on server', '-'));
+          diagEl.innerHTML = lines.join('');
+        }
+      }).catch(function() {
+        lines.push(row('SW registration check failed', 'error', 'fail'));
+        diagEl.innerHTML = lines.join('');
+      });
+    } else {
+      lines.push(row('Service Worker API', 'not available', 'fail'));
+      diagEl.innerHTML = lines.join('');
+    }
+
+    // VAPID public key info
+    fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+      if (d.key) {
+        var has6 = d.key.length >= 6;
+        lines.push(row('VAPID public key', has6 ? d.key.slice(0, 6) + '...' : '(too short)', has6 ? 'ok' : 'fail'));
+      } else {
+        lines.push(row('VAPID public key', 'not configured', 'fail'));
+      }
+      diagEl.innerHTML = lines.join('');
+    }).catch(function() {
+      lines.push(row('VAPID public key', 'fetch error', 'fail'));
+      diagEl.innerHTML = lines.join('');
+    });
+
+    diagEl.innerHTML = lines.join('');
+  }
+
+  refresh();
+
+  // Turn on notifications
+  btnTurnOn.addEventListener('click', function() {
+    if (!('Notification' in window)) { return; }
+    Notification.requestPermission().then(function(p) {
+      if (p === 'granted') {
+        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+          fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+            if (!d.key) return;
+            var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
+            while (raw.length % 4) raw += '=';
+            var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+            reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u }).then(function(sub) {
+              fetch('/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+              }).then(function() { refresh(); });
+            }).catch(function(e) { alert('Subscribe failed: ' + e.message); });
+          });
+        });
+      }
+    });
+  });
+
+  // Re-subscribe (unsubscribe then subscribe)
+  btnResub.addEventListener('click', function() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    navigator.serviceWorker.ready.then(function(reg) {
+      reg.pushManager.getSubscription().then(function(sub) {
+        if (sub) {
+          fetch('/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          }).then(function() { return sub.unsubscribe(); }).then(function() { refresh(); });
+        }
+        // Subscribe again
+        fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+          if (!d.key) return;
+          var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
+          while (raw.length % 4) raw += '=';
+          var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+          reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u }).then(function(sub) {
+            fetch('/push/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+            }).then(function() { refresh(); });
+          }).catch(function(e) { alert('Re-subscribe failed: ' + e.message); });
+        });
+      });
+    });
+  });
+
+  // Send test notification to me
+  btnTest.addEventListener('click', function() {
+    testResults.innerHTML = '<p style="font-size:var(--font-sm);color:var(--text-secondary)">Sending…</p>';
+    fetch('/api/push/test', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var html = '<h3 style="font-size:var(--font-base);font-weight:600;margin-bottom:var(--space-sm)">Test results</h3>';
+        if (d.results && d.results.length > 0) {
+          d.results.forEach(function(r) {
+            var cls = r.status >= 200 && r.status < 300 ? 'ok' : 'fail';
+            html += '<div class="sub-row"><code>#' + r.id + '</code><code class="' + cls + '">' + r.host + '</code><code class="' + cls + '">' + r.status + '</code><code class="fail">' + (r.error || '') + '</code></div>';
+          });
+        } else {
+          html += '<p style="font-size:var(--font-sm);color:var(--text-secondary)">No subscriptions on this account.</p>';
+        }
+        testResults.innerHTML = html;
+      })
+      .catch(function() { testResults.innerHTML = '<p style="color:var(--danger);font-size:var(--font-sm)">Test request failed.</p>'; });
+  });
+})();
+</script>
+<%- include('_layout_close') %>

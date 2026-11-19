@@ -165,12 +165,14 @@
   </div>
 
   <% if (membership && membership.status === 'active') { %>
+  <div id="members-data" style="display:none" data-members='<%= JSON.stringify(members) %>' data-group-id="<%= group.id %>" data-me-id="<%= session.userId %>"></div>
   <script>
     (function() {
-      var GROUP_ID = <%= group.id %>;
-      var ME_ID = <%= session.userId %>;
+      var dataEl = document.getElementById('members-data');
+      var GROUP_ID = parseInt(dataEl.dataset.groupId, 10);
+      var ME_ID = parseInt(dataEl.dataset.meId, 10);
       var GROUP_PATH = '/group/' + GROUP_ID;
-      var members = <%- JSON.stringify(members).replace(/<\//g, '<\\/') %>;
+      var members = JSON.parse(dataEl.dataset.members);
 
       function fmtDur(ms) {
         if (ms < 0) ms = 0;
@@ -331,8 +333,15 @@
           fetch(GROUP_PATH + '/nudge/' + targetId, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-              if (d.ok) { msgEl.style.color = 'var(--success)'; msgEl.textContent = 'Nudged!'; }
-              else { msgEl.style.color = 'var(--danger)'; msgEl.textContent = d.error || 'Failed'; }
+              if (d.ok) {
+                if (d.noPush) {
+                  msgEl.style.color = 'var(--warning)';
+                  msgEl.textContent = d.targetName + " hasn't turned on notifications";
+                } else {
+                  msgEl.style.color = 'var(--success)';
+                  msgEl.textContent = 'Nudged!';
+                }
+              } else { msgEl.style.color = 'var(--danger)'; msgEl.textContent = d.error || 'Failed'; }
               setTimeout(function() { msgEl.textContent = ''; }, 4000);
             })
             .catch(function() {});

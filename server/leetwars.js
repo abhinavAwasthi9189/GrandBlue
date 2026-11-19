@@ -169,6 +169,9 @@ module.exports = async function (fastify, opts) {
     const { leetcode_username } = req.body;
 
     if (leetcode_username) {
+      if (!/^[a-zA-Z0-9_-]{1,40}$/.test(leetcode_username)) {
+        return reply.send({ ok: false, error: 'Invalid LeetCode username' });
+      }
       let exists;
       try {
         exists = await checkUserExists(leetcode_username);

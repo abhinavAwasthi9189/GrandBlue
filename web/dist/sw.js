@@ -1,4 +1,5 @@
-const CACHE = 'abs-shell-v1';
+const CACHE = 'abs-shell-v2';
+const SW_VERSION = 'sw-v2';
 const ASSETS = ['/', '/login', '/register'];
 
 self.addEventListener('install', (e) => {
@@ -37,23 +38,31 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  let data = { title: 'abs', body: 'Time to study together' };
+  let title = 'abs';
+  let body = 'Time to study together';
+  let icon = '/icon.svg';
+  let data = {};
+
   if (e.data) {
-    try { data = e.data.json(); } catch (e) {}
+    try {
+      const parsed = e.data.json();
+      if (parsed && typeof parsed === 'object') {
+        title = parsed.title || title;
+        body = parsed.body || body;
+        icon = parsed.icon || icon;
+        data = parsed.data || data;
+      }
+    } catch (_) {}
   }
+
   e.waitUntil(
-    self.registration.showNotification(data.title || 'abs', {
-      body: data.body || 'Time to study together',
-      icon: data.icon || '/icon.svg',
-      data: data.data || {},
-    })
+    self.registration.showNotification(title, { body, icon, data })
   );
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = e.notification.data && e.notification.data.url;
-  if (!url) return;
+  const url = (e.notification.data && e.notification.data.url) || '/';
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
       for (const client of clientsList) {

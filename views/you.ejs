@@ -328,6 +328,12 @@
     });
   }
 
+  function base64ToUint8(b64) {
+    var raw = b64.replace(/-/g, '+').replace(/_/g, '/');
+    while (raw.length % 4) raw += '=';
+    return new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+  }
+
   function doSubscribe() {
     // Check secure context
     if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
@@ -338,9 +344,7 @@
     navigator.serviceWorker.register('/sw.js').then(function(reg) {
       fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
         if (!d.key) { notifStatus.textContent = 'Push not configured'; return; }
-        var raw = d.key.replace(/-/g, '+').replace(/_/g, '/');
-        while (raw.length % 4) raw += '=';
-        var u = new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+        var u = base64ToUint8(d.key);
         reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
           .then(function(sub) {
             fetch('/push/subscribe', {
@@ -356,6 +360,46 @@
           });
         }).catch(function() { notifStatus.textContent = 'VAPID fetch failed'; });
       }).catch(function() { notifStatus.textContent = 'SW registration failed'; });
+  }
+
+  // Handle pushsubscriptionchange — re-subscribe and save new endpoint
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    navigator.serviceWorker.ready.then(function(reg) {
+      reg.pushManager.addEventListener('pushsubscriptionchange', function() {
+        fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+          if (!d.key) return;
+          var u = base64ToUint8(d.key);
+          reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
+            .then(function(sub) {
+              fetch('/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+              });
+            });
+        });
+      });
+    });
+  }
+
+  // Delete push subscriptions on logout
+  var logoutLink = document.querySelector('a[href="/logout"]');
+  if (logoutLink) {
+    logoutLink.addEventListener('click', function() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(function(reg) {
+          reg.pushManager.getSubscription().then(function(sub) {
+            if (sub) {
+              fetch('/push/unsubscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint: sub.endpoint }),
+              }).then(function() { sub.unsubscribe(); });
+            }
+          });
+        });
+      }
+    });
   }
 
   // --- Install prompt ---

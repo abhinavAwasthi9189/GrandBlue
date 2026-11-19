@@ -1,5 +1,8 @@
 const crypto = require('crypto');
 const studyState = require('./studyState');
+const rateLimit = require('./rateLimit');
+
+const inviteRL = rateLimit({ max: 10, windowMs: 60_000, keyFn: req => req.ip + ':' + (req.body && req.body.username || '') });
 
 module.exports = async function (fastify, opts) {
   fastify.addHook('onRequest', async (req, reply) => {
@@ -128,6 +131,7 @@ module.exports = async function (fastify, opts) {
   });
 
   fastify.post('/group/:id/invite', async (req, reply) => {
+    { const r = inviteRL(req, reply); if (r !== true) return r; }
     const { username } = req.body;
     if (!username) return reply.redirect('/group/' + req.params.id);
 
@@ -179,7 +183,7 @@ module.exports = async function (fastify, opts) {
     ).get(req.params.id, req.session.userId, 'admin', 'active');
     if (!membership) return reply.redirect('/');
 
-    const code = crypto.randomBytes(4).toString('hex');
+    const code = crypto.randomBytes(8).toString('hex');
     const now = Date.now();
     fastify.db.prepare(
       'INSERT INTO invites (code, group_id, created_by, expires_at) VALUES (?, ?, ?, ?)'

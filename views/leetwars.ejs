@@ -376,7 +376,10 @@ function ago(ms) {
       fetch('/group/' + GROUP_ID + '/nudge/' + targetId, { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-          if (d.ok) { btn.textContent = 'Nudged!'; setTimeout(function() { btn.textContent = 'Nudge'; }, 4000); }
+          if (d.ok) {
+            if (d.noPush) { btn.textContent = d.targetName + " hasn't turned on"; setTimeout(function() { btn.textContent = 'Nudge'; }, 4000); }
+            else { btn.textContent = 'Nudged!'; setTimeout(function() { btn.textContent = 'Nudge'; }, 4000); }
+          }
           else { btn.style.color = 'var(--danger)'; setTimeout(function() { btn.style.color = ''; }, 4000); }
         })
         .catch(function() {});

@@ -1,5 +1,25 @@
 const webpush = require('web-push');
 const { isActiveMember } = require('./studyState');
+const rateLimit = require('./rateLimit');
+
+const testPushRL = rateLimit({ max: 5, windowMs: 60_000 });
+
+const ALLOWED_PUSH_HOSTS = [
+  'fcm.googleapis.com',
+  '.push.apple.com',
+  '.push.services.mozilla.com',
+  '.notify.windows.com',
+];
+
+function isAllowedPushEndpoint(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== 'https:') return false;
+    return ALLOWED_PUSH_HOSTS.some(h =>
+      h.startsWith('.') ? url.hostname.endsWith(h) : url.hostname === h
+    );
+  } catch { return false; }
+}
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || null;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || null;
@@ -9,6 +29,8 @@ const VAPID_CFG = VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY;
 if (VAPID_CFG) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
+
+const VAPID_SUBJECT_VALID = VAPID_SUBJECT.startsWith('mailto:') || VAPID_SUBJECT.startsWith('https://');
 
 const COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -23,12 +45,57 @@ function requireAuth(req, reply) {
 module.exports = async function (fastify, opts) {
   const db = fastify.db;
 
-  if (!VAPID_CFG) {
+  if (VAPID_CFG) {
+    fastify.log.info('VAPID keys present; public key starts with: %s', VAPID_PUBLIC_KEY.slice(0, 6));
+    fastify.log.info('VAPID_SUBJECT valid (starts with mailto: or https://): %s', VAPID_SUBJECT_VALID);
+  } else {
     fastify.log.warn('VAPID keys not set — push notifications disabled. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.');
   }
 
   fastify.get('/push/vapid-public-key', async (req, reply) => {
     return reply.send({ key: VAPID_PUBLIC_KEY || '' });
+  });
+
+  fastify.post('/api/push/test', async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
+    { const r = testPushRL(req, reply); if (r !== true) return r; }
+
+    const subs = db.prepare(
+      'SELECT id, endpoint, keys_json FROM push_subscriptions WHERE user_id = ?'
+    ).all(req.session.userId);
+
+    if (subs.length === 0) {
+      return reply.send({ ok: true, results: [] });
+    }
+
+    const payload = JSON.stringify({
+      title: 'abs test',
+      body: 'abs test',
+      icon: '/icon.svg',
+      data: { url: '/' },
+    });
+
+    const results = [];
+    for (const sub of subs) {
+      const result = { id: sub.id, host: '', status: 0, error: null };
+      try {
+        const url = new URL(sub.endpoint);
+        result.host = url.hostname;
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: JSON.parse(sub.keys_json),
+        }, payload);
+        result.status = 201;
+      } catch (err) {
+        result.status = err.statusCode || 0;
+        result.error = err.body || err.message || String(err);
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+        }
+      }
+      results.push(result);
+    }
+    return reply.send({ ok: true, results });
   });
 
   fastify.get('/push/status', async (req, reply) => {
@@ -44,6 +111,9 @@ module.exports = async function (fastify, opts) {
     const { endpoint, keys } = req.body;
     if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
       return reply.code(400).send({ ok: false });
+    }
+    if (!isAllowedPushEndpoint(endpoint)) {
+      return reply.code(400).send({ ok: false, error: 'invalid endpoint' });
     }
 
     const existing = db.prepare('SELECT id FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
@@ -113,9 +183,14 @@ module.exports = async function (fastify, opts) {
         'SELECT endpoint, keys_json FROM push_subscriptions WHERE user_id = ?'
       ).all(targetId);
 
-      fastify.log.info('nudge: sending push to user %d (%d subscriptions)', targetId, subs.length);
+      const targetUsername = db.prepare('SELECT username FROM users WHERE id = ?').get(targetId);
+      const targetName = targetUsername ? targetUsername.username : String(targetId);
+
+      fastify.log.info('nudge sender=%d target=%d subs=%d', senderId, targetId, subs.length);
+
       if (subs.length === 0) {
-        fastify.log.warn('nudge: no push subscriptions for user %d', targetId);
+        fastify.log.warn('nudge: target %d has zero subscriptions', targetId);
+        return reply.send({ ok: true, noPush: true, targetName });
       }
 
       const payload = JSON.stringify({
@@ -131,11 +206,17 @@ module.exports = async function (fastify, opts) {
             endpoint: sub.endpoint,
             keys: JSON.parse(sub.keys_json),
           }, payload);
+          fastify.log.info('nudge send to %s ok', sub.endpoint.slice(0, 40));
         } catch (err) {
-          fastify.log.warn('push send failed to %s: %s', sub.endpoint.slice(0, 40), err.message || err);
+          fastify.log.warn(
+            'nudge send to %s status=%s body=%s',
+            sub.endpoint.slice(0, 40),
+            err.statusCode || '?',
+            err.body || err.message || ''
+          );
           if (err.statusCode === 404 || err.statusCode === 410) {
             db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
-            fastify.log.info('deleted stale subscription %s', sub.endpoint.slice(0, 40));
+            fastify.log.info('deleted stale subscription for %s', sub.endpoint.slice(0, 40));
           }
         }
       }

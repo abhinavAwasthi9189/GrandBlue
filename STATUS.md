@@ -254,11 +254,59 @@ sudo journalctl -u abs -f                                       # follow logs
 2. Open browser dev tools and toggle device toolbar (or resize the window)
 3. At each width band, check the layout matches above
 
-## Known problems (unchanged)
+## Security changes applied (2026-11-17)
+- CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy via `@fastify/helmet`
+- Cache-Control: no-store on HTML pages
+- Origin header check on POST/PUT/DELETE (CSRF defense)
+- Session ID regenerated on login/register
+- Login timing oracle fixed (always runs argon2)
+- Push subscription endpoints validated against known push service hostnames (SSRF fix)
+- LeetCode username validated with regex before API call
+- Invite codes now 64 bits (was 32 bits)
+- Rate limiter on invite-by-username (prevents enumeration)
+- VAPID keys removed from start.sh
+- Group page member data served via `data-*` attribute instead of raw `<%-`
+- Server listens on 127.0.0.1:3000 (was 0.0.0.0:3000)
+
+## Push diagnostics added (2026-11-17)
+
+### Server diagnostics (`server/push.js`)
+- **Startup logging**: logs whether VAPID keys are present, first 6 chars of public key, whether `VAPID_SUBJECT` starts with `mailto:` or `https://`. Never logs the private key.
+- **`POST /api/push/test`** (logged-in only, rate-limited 5/min): sends `"abs test"` to every saved subscription of the caller. Returns JSON with one entry per subscription: `id`, `host` (hostname only), `status` (HTTP status from push service), `error` (body if any). Deletes subscription on 404/410.
+- **Nudge logging**: logs one line per nudge: sender id, target id, number of target's subscriptions, status code for each send. If target has zero subscriptions: logs a warning and returns `{ ok: true, noPush: true, targetName: "..." }` so the UI shows `"<name> hasn't turned on notifications"` instead of "Nudged!".
+
+### Client diagnostics
+- **`/push-debug` page** (logged-in only): shows live:
+  - `Notification.permission`
+  - Whether the app is installed (`display-mode: standalone`)
+  - Service worker state: registered, scope, active/waiting, script URL
+  - Push subscription status: whether `pushManager.getSubscription()` returns one, its endpoint host
+  - Whether the server has this endpoint saved for the current user (via `GET /push/subscriptions-for-user`)
+  - First 6 characters of the VAPID public key
+  - Buttons: "Turn on notifications", "Re-subscribe" (unsubscribe → subscribe → save), "Send test notification to me" (calls `/api/push/test` and shows results inline)
+- **Service worker** (`web/dist/sw.js`): push handler always calls `showNotification` inside `event.waitUntil` with generic title/body if payload is missing or unparseable; `notificationclick` handler focuses open window or opens `/`; `skipWaiting()` and `clients.claim()`; version string `sw-v2`. Served with `Cache-Control: no-cache`.
+- **Subscription hygiene** in `views/you.ejs`: subscribe when permission is granted; `pushsubscriptionchange` listener re-subscribes and saves the new endpoint; logout handler deletes the device's subscription before navigating.
+
+### How to use the debug page
+1. Navigate to `/push-debug` while logged in.
+2. Read the diagnostics panel top-to-bottom:
+   - **Notification.permission**: `granted` = browser allows notifications; `denied` = blocked by user (must unblock in browser settings); `default` = never asked.
+   - **Installed**: `true` if the page is running as a standalone PWA (added to Home Screen). Notifications may not work in a browser tab on iOS — must be installed.
+   - **SW registered**: `yes` means the service worker is installed. If `no`, the SW failed to register (check console, HTTPS, or path).
+   - **SW scope**: should be `/` for the SW to control the whole app.
+   - **SW state**: `active` means it's running. `waiting` means a newer version is ready but the old one is still in control (close all tabs).
+   - **SW version**: shows the script URL; check for `sw-v2` in the response body.
+   - **Push subscription**: `yes` with an endpoint host means the browser has a valid push subscription. `none` means no subscription — click "Turn on notifications".
+   - **Endpoint host**: the push service (e.g. `fcm.googleapis.com`). If unexpected, something is wrong.
+   - **Saved on server**: `yes` with count means the server has this device's subscription on record. `no` means the subscription isn't saved — click "Re-subscribe".
+   - **VAPID public key**: first 6 chars tell you which key the page is using; must match the server's env var.
+3. If "Saved on server" shows `no` but the browser has a subscription, click **"Re-subscribe"** — it unsubscribes, subscribes fresh, and saves to the server.
+4. Click **"Send test notification to me"** to fire a test push. The results table shows each subscription's id, host, status code, and error. Status 201 = delivered to the push service. 404/410 = stale subscription (auto-deleted). Other codes = push service rejected it (check VAPID keys, endpoint validity).
+5. If no notification arrives after a 201, check: device notifications are enabled in the OS, the browser has notification permission, and the PWA is installed (not just a browser tab on iOS).
+
+### Known problems (unchanged)
 - Session cookie invalidated on server restart (dev secret changes). Set `SESSION_SECRET` env var.
 - Invite link code is shown but not yet copy-to-clipboard friendly on mobile.
-- No CSP/helmet headers.
 - Pause and stop are the same server-side action (both close the session); "resume" calls start.
 - Rate limiter resets on server restart (in-memory, not shared across processes).
-- No VAPID key generation helper — generate keys with `node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log('Public:',k.publicKey);console.log('Private:',k.privateKey)"`- Nudge/web push: built but unreliable. Fix later (check VAPID env, service worker updates, iPhone Home Screen install, server log on send).
 - Mini-timer Pause/Stop buttons on mobile are 30px tall (below 44px tap target). Fixing requires restructuring the mini-timer bar layout.

@@ -35,6 +35,7 @@ module.exports = async function (fastify, opts) {
     const createdAt = Date.now();
     fastify.db.prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)').run(username, hash, createdAt);
 
+    req.session.regenerate();
     req.session.userId = fastify.db.prepare('SELECT id FROM users WHERE username = ?').get(username).id;
     req.session.username = username;
     return reply.redirect('/');
@@ -54,15 +55,13 @@ module.exports = async function (fastify, opts) {
     }
 
     const user = fastify.db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-    if (!user) {
+    const hash = user ? user.password_hash : '$argon2id$v=19$m=65536,t=3,p=4$nQlDo5ZMr8Fl7EoQck3/1Q$GwyPIBWR48idiLmLOK4CqHJg2cCKCwzuGmgBh8r7U2I';
+    const valid = await argon2.verify(hash, password);
+    if (!user || !valid) {
       return reply.view('login', { error: 'Invalid credentials' });
     }
 
-    const valid = await argon2.verify(user.password_hash, password);
-    if (!valid) {
-      return reply.view('login', { error: 'Invalid credentials' });
-    }
-
+    req.session.regenerate();
     req.session.userId = user.id;
     req.session.username = user.username;
     return reply.redirect('/');

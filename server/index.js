@@ -23,6 +23,39 @@ const fastify = Fastify({
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/cookie'));
 
+fastify.addHook('onRequest', async (req, reply) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+    const origin = req.headers.origin;
+    const referer = req.headers.referer;
+    if (origin || referer) {
+      const host = req.hostname;
+      if (origin && !origin.startsWith('https://' + host) && !origin.startsWith('http://' + host)) {
+        return reply.code(403).send({ ok: false });
+      }
+      if (referer && !referer.startsWith('https://' + host) && !referer.startsWith('http://' + host)) {
+        return reply.code(403).send({ ok: false });
+      }
+    }
+  }
+});
+
+fastify.register(require('@fastify/helmet'), {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://leetcode.com"],
+      connectSrc: ["'self'", "https://leetcode.com"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  xFrameOptions: { action: 'deny' },
+  xContentTypeOptions: true,
+  referrerPolicy: { policy: 'no-referrer' },
+  hsts: false,
+});
+
 // Serve static files from both web/dist and public/
 const staticDirs = [
   path.join(__dirname, '..', 'web', 'dist'),
@@ -61,6 +94,16 @@ fastify.register(require('@fastify/view'), {
   root: path.join(__dirname, '..', 'views'),
 });
 
+fastify.addHook('onSend', async (req, reply, payload) => {
+  if (req.url.startsWith('/ws/')) return;
+  if (req.url === '/sw.js') {
+    reply.header('Cache-Control', 'no-cache');
+    return;
+  }
+  if (/\.(js|css|png|jpg|svg|ico|webmanifest)$/.test(req.url)) return;
+  reply.header('Cache-Control', 'no-store');
+});
+
 fastify.decorate('db', require('./db'));
 
 fastify.register(require('./auth'));
@@ -68,6 +111,19 @@ fastify.register(require('./groups'));
 fastify.register(require('./study'), { sessionStore, cookieSigner });
 fastify.register(require('./history'));
 fastify.register(require('./push'));
+
+fastify.get('/push-debug', async (req, reply) => {
+  if (!req.session.userId) return reply.redirect('/login');
+  return reply.view('push-debug', { session: req.session });
+});
+
+fastify.get('/push/subscriptions-for-user', async (req, reply) => {
+  if (!req.session.userId) return reply.send({ endpoints: [], count: 0 });
+  const rows = fastify.db.prepare(
+    'SELECT endpoint FROM push_subscriptions WHERE user_id = ?'
+  ).all(req.session.userId);
+  return reply.send({ endpoints: rows.map(r => r.endpoint), count: rows.length });
+});
 fastify.register(require('./leetwars'));
 fastify.register(require('./stats'));
 
@@ -195,7 +251,7 @@ fastify.setErrorHandler(async (err, req, reply) => {
 async function start() {
   try {
     const port = parseInt(process.env.PORT, 10) || 3000;
-    await fastify.listen({ port, host: '0.0.0.0' });
+    await fastify.listen({ port, host: '127.0.0.1' });
     fastify.log.info(`server listening on ${fastify.server.address().port}`);
   } catch (err) {
     fastify.log.error(err);
