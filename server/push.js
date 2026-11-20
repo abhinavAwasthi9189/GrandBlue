@@ -69,8 +69,8 @@ module.exports = async function (fastify, opts) {
     }
 
     const payload = JSON.stringify({
-      title: 'abs test',
-      body: 'abs test',
+      title: 'GrandBlue Test',
+      body: 'GrandBlue Test',
       icon: '/icon.svg',
       data: { url: '/' },
     });
@@ -194,7 +194,7 @@ module.exports = async function (fastify, opts) {
       }
 
       const payload = JSON.stringify({
-        title: 'abs',
+        title: 'GrandBlue',
         body: 'Time to study together',
         icon: '/icon.svg',
         data: { url: '/group/' + groupId },

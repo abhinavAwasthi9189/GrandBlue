@@ -23,21 +23,7 @@ const fastify = Fastify({
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/cookie'));
 
-fastify.addHook('onRequest', async (req, reply) => {
-  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    const origin = req.headers.origin;
-    const referer = req.headers.referer;
-    if (origin || referer) {
-      const host = req.hostname;
-      if (origin && !origin.startsWith('https://' + host) && !origin.startsWith('http://' + host)) {
-        return reply.code(403).send({ ok: false });
-      }
-      if (referer && !referer.startsWith('https://' + host) && !referer.startsWith('http://' + host)) {
-        return reply.code(403).send({ ok: false });
-      }
-    }
-  }
-});
+
 
 fastify.register(require('@fastify/helmet'), {
   contentSecurityPolicy: {

@@ -292,12 +292,6 @@
     }
   }
 
-  fetch('/push/status').then(function(r) { return r.json(); }).then(function(state) {
-    updateNotifUI(state);
-    // Diagnostic: log connection info
-    console.log('abs: protocol=' + location.protocol + ' push=' + (state.vapidConfigured ? 'ready' : 'no-vapid') + ' subscribed=' + state.subscribed);
-  }).catch(function() { notifStatus.textContent = 'Unavailable'; });
-
   if (notifBtn) {
     notifBtn.addEventListener('click', function() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
@@ -345,22 +339,55 @@
       fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
         if (!d.key) { notifStatus.textContent = 'Push not configured'; return; }
         var u = base64ToUint8(d.key);
-        reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u })
-          .then(function(sub) {
+        // Unsubscribe any stale subscription first (e.g. from a different VAPID key)
+        reg.pushManager.getSubscription().then(function(oldSub) {
+          if (oldSub) {
+            return fetch('/push/unsubscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: oldSub.endpoint }),
+            }).then(function() { return oldSub.unsubscribe(); });
+          }
+        }).then(function() {
+          return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u });
+        }).then(function(sub) {
+          return fetch('/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+          }).then(function(r) { return r.json(); });
+        }).then(function() {
+          updateNotifUI({ subscribed: true, vapidConfigured: true });
+        }).catch(function(e) {
+          notifStatus.textContent = 'Subscription failed: ' + (e.message || 'unknown');
+          notifBtn.style.display = 'inline-flex';
+        });
+        }).catch(function() { notifStatus.textContent = 'VAPID fetch failed'; });
+      }).catch(function() { notifStatus.textContent = 'SW registration failed'; });
+  }
+
+  fetch('/push/status').then(function(r) { return r.json(); }).then(function(state) {
+    updateNotifUI(state);
+    console.log('abs: protocol=' + location.protocol + ' push=' + (state.vapidConfigured ? 'ready' : 'no-vapid') + ' subscribed=' + state.subscribed);
+
+    if (state.vapidConfigured && !state.subscribed && 'Notification' in window && Notification.permission === 'granted') {
+      navigator.serviceWorker.ready.then(function(reg) {
+        reg.pushManager.getSubscription().then(function(sub) {
+          if (sub) {
             fetch('/push/subscribe', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
             }).then(function(r) { return r.json(); }).then(function() {
               updateNotifUI({ subscribed: true, vapidConfigured: true });
-            }).catch(function() { notifStatus.textContent = 'Server error'; });
-          }).catch(function(e) {
-            notifStatus.textContent = 'Subscription failed: ' + (e.message || 'unknown');
-            notifBtn.style.display = 'inline-flex';
-          });
-        }).catch(function() { notifStatus.textContent = 'VAPID fetch failed'; });
-      }).catch(function() { notifStatus.textContent = 'SW registration failed'; });
-  }
+            });
+          } else {
+            doSubscribe();
+          }
+        });
+      });
+    }
+  }).catch(function() { notifStatus.textContent = 'Unavailable'; });
 
   // Handle pushsubscriptionchange — re-subscribe and save new endpoint
   if ('serviceWorker' in navigator && 'PushManager' in window) {

@@ -17,7 +17,7 @@ self.addEventListener('fetch', (e) => {
   const { request } = e;
   const url = new URL(request.url);
 
-  if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/group/')) {
+  if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/group/') || url.pathname.startsWith('/push/') || url.pathname.startsWith('/api/')) {
     return;
   }
 
@@ -38,7 +38,7 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  let title = 'abs';
+  let title = 'GrandBlue';
   let body = 'Time to study together';
   let icon = '/icon.svg';
   let data = {};
