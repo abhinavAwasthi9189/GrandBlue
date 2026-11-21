@@ -29,11 +29,18 @@ Self-hosted PWA for friend groups to study together, see live study time, and co
 - Index sessions by (user_id, start_ms) and solved_problems by (user_id, solved_at_ms).
 
 ## Study timer
-- Start/stop/pause from the client. Client shows the running time from `start_ms` (no per-second writes).
-- Client sends a heartbeat every 30 s. If no heartbeat for 3 min, the server closes the session at the last heartbeat.
-- Live view per group: each member with a running timer if studying, otherwise "last studied X ago", plus this week's total.
+- A session stays open until: the user taps Stop, or the user starts another session (previous session is closed at `Date.now()`), or the user's WebSocket stays disconnected for `MAX_SESSION_HOURS` (env var, default 6).
+- When the user's last WebSocket disconnects, the server starts a grace timer of `MAX_SESSION_HOURS`. If the user reconnects before it expires, the timer resets and the session continues uninterrupted (all time counted). If the timer expires, the session is closed with `end_ms = now - MAX_SESSION_HOURS`, so the disconnected grace period is NOT counted as study time.
+- Missing heartbeat, phone sleeping, or the app being closed NEVER directly ends a session — they only matter because they cause the WebSocket to disconnect, which starts the grace timer.
+- Client sends a heartbeat every 30 s.
+- Live view per group: each member with a running timer if studying, otherwise "last studied X ago", plus this week's total. If a studying member's last heartbeat is older than 10 minutes, a small muted "away" hint is shown.
+- The server is the only clock. All state messages include `server_now_ms`. The client computes elapsed time as `(server_now_ms - start_ms) + local_time_since_message_arrived`.
+- Client: on `visibilitychange` (to visible), `pageshow` and `online`, refetches the current session and reconnects the WebSocket. WebSocket reconnection uses exponential backoff (1 s up to 30 s). Never sends Stop automatically on `pagehide` or `beforeunload`.
+- Screen Wake Lock: requested while the timer is visible and running (inside try/catch), re-requested on visibility visible, released on Stop.
+- When the user taps Stop on a session older than 3 hours, a dialog appears with a time picker defaulting to now (min: `start + 1 min`, max: now).
 - Nudge button sits next to members who are not studying. Cooldown: one nudge per (sender, target) per 10 minutes.
 - History: weekly totals for past weeks per person (group view).
+- `GET /api/session/current` returns the current open session or null, plus `server_now_ms`.
 
 ## Leetwars
 - Poll every 20 min per linked account with LeetCode's unofficial GraphQL `recentAcSubmissionList`; store new accepted solves.

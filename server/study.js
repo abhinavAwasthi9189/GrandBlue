@@ -1,7 +1,7 @@
 const { WebSocketServer } = require('ws');
 const { getWeekStartIST, WEEK_MS, getMemberState, isActiveMember, getActiveMembers } = require('./studyState');
 
-const STALE_MS = 3 * 60 * 1000;
+const MAX_SESSION_MS = (parseFloat(process.env.MAX_SESSION_HOURS) || 6) * 3600000;
 const CLEANUP_INTERVAL = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -9,6 +9,8 @@ module.exports = async function (fastify, opts) {
   const db = fastify.db;
   const wss = new WebSocketServer({ noServer: true });
   const connections = new Map();
+  const userConnCount = new Map();
+  const userDisconnectedAt = new Map();
 
   function parseCookies(header) {
     const out = {};
@@ -33,6 +35,11 @@ module.exports = async function (fastify, opts) {
     return value;
   }
 
+  function statePayload(db) {
+    const nowMs = Date.now();
+    return { server_now_ms: nowMs };
+  }
+
   fastify.server.on('upgrade', (req, socket, head) => {
     const m = req.url.match(/^\/ws\/group\/(\d+)$/);
     if (!m) return;
@@ -52,13 +59,24 @@ module.exports = async function (fastify, opts) {
         ws.groupId = groupId;
         if (!connections.has(groupId)) connections.set(groupId, new Set());
         connections.get(groupId).add(ws);
-        ws.send(JSON.stringify({
+        userConnCount.set(session.userId, (userConnCount.get(session.userId) || 0) + 1);
+        userDisconnectedAt.delete(session.userId);
+        ws.send(JSON.stringify(Object.assign({
           type: 'state',
           members: getActiveMembers(db, groupId).map(r => getMemberState(db, r.id)),
-        }));
+        }, statePayload(db))));
         ws.on('close', () => {
           const set = connections.get(groupId);
           if (set) { set.delete(ws); if (set.size === 0) connections.delete(groupId); }
+          const cnt = userConnCount.get(ws.userId) || 0;
+          if (cnt <= 1) {
+            userConnCount.delete(ws.userId);
+            if (db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND end_ms IS NULL').get(ws.userId)) {
+              userDisconnectedAt.set(ws.userId, Date.now());
+            }
+          } else {
+            userConnCount.set(ws.userId, cnt - 1);
+          }
         });
       });
     });
@@ -67,7 +85,7 @@ module.exports = async function (fastify, opts) {
   function broadcast(groupId, message) {
     const set = connections.get(groupId);
     if (!set) return;
-    const data = JSON.stringify(message);
+    const data = JSON.stringify(Object.assign(message, statePayload(db)));
     for (const ws of set) if (ws.readyState === 1) ws.send(data);
   }
 
@@ -78,7 +96,8 @@ module.exports = async function (fastify, opts) {
       "SELECT group_id FROM memberships WHERE user_id = ? AND status = 'active'"
     ).all(userId);
     const state = getMemberState(db, userId);
-    for (const g of groups) broadcast(g.group_id, { type: 'update', member: state });
+    const payload = Object.assign({ type: 'update', member: state }, statePayload(db));
+    for (const g of groups) broadcast(g.group_id, payload);
   }
 
   fastify.post('/group/:id/start', async (req, reply) => {
@@ -86,16 +105,15 @@ module.exports = async function (fastify, opts) {
     if (!isActiveMember(db, groupId, req.session.userId)) {
       return reply.code(403).send({ ok: false });
     }
-    const open = db.prepare(
-      'SELECT 1 FROM sessions WHERE user_id = ? AND end_ms IS NULL'
-    ).get(req.session.userId);
-    if (open) return reply.code(400).send({ ok: false, error: 'already studying' });
     const now = Date.now();
+    db.prepare(
+      'UPDATE sessions SET end_ms = ? WHERE user_id = ? AND end_ms IS NULL'
+    ).run(now, req.session.userId);
     db.prepare(
       'INSERT INTO sessions (user_id, start_ms, end_ms, last_heartbeat_ms) VALUES (?, ?, NULL, ?)'
     ).run(req.session.userId, now, now);
     broadcastUser(req.session.userId);
-    return reply.send({ ok: true });
+    return reply.send({ ok: true, startMs: now });
   });
 
   fastify.post('/group/:id/stop', async (req, reply) => {
@@ -103,10 +121,18 @@ module.exports = async function (fastify, opts) {
     if (!isActiveMember(db, groupId, req.session.userId)) {
       return reply.code(403).send({ ok: false });
     }
-    const info = db.prepare(
+    const session = db.prepare(
+      'SELECT start_ms FROM sessions WHERE user_id = ? AND end_ms IS NULL'
+    ).get(req.session.userId);
+    if (!session) return reply.code(400).send({ ok: false, error: 'not studying' });
+    const now = Date.now();
+    let endMs = req.body && req.body.endMs ? parseInt(req.body.endMs, 10) : now;
+    if (isNaN(endMs) || endMs > now) endMs = now;
+    const minEndMs = session.start_ms + 60000;
+    if (endMs < minEndMs) endMs = now;
+    db.prepare(
       'UPDATE sessions SET end_ms = ? WHERE user_id = ? AND end_ms IS NULL'
-    ).run(Date.now(), req.session.userId);
-    if (info.changes === 0) return reply.code(400).send({ ok: false, error: 'not studying' });
+    ).run(endMs, req.session.userId);
     broadcastUser(req.session.userId);
     return reply.send({ ok: true });
   });
@@ -120,6 +146,14 @@ module.exports = async function (fastify, opts) {
       'UPDATE sessions SET last_heartbeat_ms = ? WHERE user_id = ? AND end_ms IS NULL'
     ).run(Date.now(), req.session.userId);
     return reply.send({ ok: info.changes > 0 });
+  });
+
+  fastify.get('/api/session/current', async (req, reply) => {
+    if (!req.session.userId) return reply.send({ session: null, server_now_ms: Date.now() });
+    const row = db.prepare(
+      'SELECT start_ms, last_heartbeat_ms FROM sessions WHERE user_id = ? AND end_ms IS NULL'
+    ).get(req.session.userId);
+    return reply.send({ session: row || null, server_now_ms: Date.now() });
   });
 
   function getISTOffset(ms) {
@@ -184,14 +218,19 @@ module.exports = async function (fastify, opts) {
   });
 
   setInterval(() => {
-    const cutoff = Date.now() - STALE_MS;
-    const stale = db.prepare(
-      'SELECT id, user_id FROM sessions WHERE end_ms IS NULL AND last_heartbeat_ms < ?'
-    ).all(cutoff);
-    for (const s of stale) {
-      db.prepare('UPDATE sessions SET end_ms = last_heartbeat_ms WHERE id = ?').run(s.id);
-      broadcastUser(s.user_id);
+    const now = Date.now();
+    for (const [userId, disconnectedAt] of userDisconnectedAt) {
+      if (now - disconnectedAt >= MAX_SESSION_MS) {
+        const endMs = now - MAX_SESSION_MS;
+        const info = db.prepare(
+          'UPDATE sessions SET end_ms = ? WHERE user_id = ? AND end_ms IS NULL'
+        ).run(endMs, userId);
+        if (info.changes > 0) {
+          broadcastUser(userId);
+          fastify.log.info('closed session for user %d (disconnected > MAX_SESSION_HOURS)', userId);
+        }
+        userDisconnectedAt.delete(userId);
+      }
     }
-    if (stale.length) fastify.log.info('closed %d stale sessions', stale.length);
   }, CLEANUP_INTERVAL);
 };

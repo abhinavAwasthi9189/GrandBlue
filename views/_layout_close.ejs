@@ -16,6 +16,8 @@
   var miniInterval = null;
   var miniStartMs = null;
   var miniGroupId = null;
+  var miniServerNowMs = null;
+  var miniServerNowReceivedAt = null;
 
   function fmtTimer(ms) {
     if (ms < 0) ms = 0;
@@ -28,15 +30,22 @@
 
   function updateMiniTimer() {
     if (!miniStartMs) return;
-    var elapsed = Date.now() - miniStartMs;
+    var elapsed;
+    if (miniServerNowMs !== null) {
+      elapsed = (miniServerNowMs - miniStartMs) + (Date.now() - miniServerNowReceivedAt);
+    } else {
+      elapsed = Date.now() - miniStartMs;
+    }
     var text = fmtTimer(elapsed);
     if (miniTimeEl) miniTimeEl.textContent = text;
     if (miniTimeMobileEl) miniTimeMobileEl.textContent = text;
   }
 
-  function showMiniTimer(startMs, groupId) {
+  function showMiniTimer(startMs, groupId, srvNowMs, srvNowReceivedAt) {
     miniStartMs = startMs;
     miniGroupId = groupId;
+    miniServerNowMs = srvNowMs !== undefined ? srvNowMs : null;
+    miniServerNowReceivedAt = srvNowReceivedAt !== undefined ? srvNowReceivedAt : null;
     if (miniTimerEl) miniTimerEl.classList.add('active');
     if (miniTimerMobileEl) miniTimerMobileEl.classList.add('active');
     updateMiniTimer();

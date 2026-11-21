@@ -166,6 +166,23 @@
 
   <% if (membership && membership.status === 'active') { %>
   <div id="members-data" style="display:none" data-members='<%= JSON.stringify(members) %>' data-group-id="<%= group.id %>" data-me-id="<%= session.userId %>"></div>
+
+  <!-- Stop-with-time-picker dialog -->
+  <div class="dialog-overlay" id="stop-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Did you stop earlier?</div>
+        <button class="dialog-close" id="stop-dialog-close">✕</button>
+      </div>
+      <p style="margin-bottom:var(--space-md);color:var(--text-secondary);font-size:var(--font-sm)">Set the time you stopped studying:</p>
+      <input type="datetime-local" id="stop-end-time" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);font-size:16px;margin-bottom:var(--space-md)">
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="stop-dialog-cancel">Cancel</button>
+        <button class="btn btn-danger" id="stop-dialog-confirm">Stop</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function() {
       var dataEl = document.getElementById('members-data');
@@ -173,6 +190,9 @@
       var ME_ID = parseInt(dataEl.dataset.meId, 10);
       var GROUP_PATH = '/group/' + GROUP_ID;
       var members = JSON.parse(dataEl.dataset.members);
+
+      var serverNowMs = null;
+      var serverNowReceivedAt = null;
 
       function fmtDur(ms) {
         if (ms < 0) ms = 0;
@@ -183,6 +203,11 @@
         if (h > 0) return h + 'h ' + m + 'm ' + sec + 's';
         if (m > 0) return m + 'm ' + sec + 's';
         return sec + 's';
+      }
+
+      function elapsedSince(startMs) {
+        if (serverNowMs === null) return Date.now() - startMs;
+        return (serverNowMs - startMs) + (Date.now() - serverNowReceivedAt);
       }
 
       var heartbeatTimer = null;
@@ -204,8 +229,11 @@
       }
 
       function statusText(m) {
-        if (m.studying) return 'Studying';
-        return '';
+        if (!m.studying) return '';
+        if (m.lastHeartbeatMs && serverNowMs && (serverNowMs - m.lastHeartbeatMs) > 600000) {
+          return 'Studying · away';
+        }
+        return 'Studying';
       }
 
       function showToast(text) {
@@ -217,19 +245,33 @@
         setTimeout(function() { t.remove(); }, 4000);
       }
 
+      var wakeLock = null;
+
+      function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+          try {
+            navigator.wakeLock.request('screen').then(function(lock) {
+              wakeLock = lock;
+            }).catch(function() {});
+          } catch(e) {}
+        }
+      }
+
+      function releaseWakeLock() {
+        if (wakeLock) { wakeLock.release().catch(function() {}); wakeLock = null; }
+      }
+
       function render() {
         var me = null;
         var container = document.getElementById('members-tab');
         var rows = Array.from(container.querySelectorAll('.list-row'));
 
-        // Sort: studying first, then by username
         var sortedIds = members.slice().sort(function(a, b) {
           if (a.studying && !b.studying) return -1;
           if (!a.studying && b.studying) return 1;
           return a.username < b.username ? -1 : 1;
         }).map(function(m) { return m.userId; });
 
-        // Reorder DOM to match sorted order
         var currentOrder = rows.map(function(r) { return Number(r.dataset.user); });
         var needsReorder = false;
         for (var si = 0; si < sortedIds.length; si++) {
@@ -248,7 +290,15 @@
           var row = document.querySelector('[data-user="' + m.userId + '"]');
           if (!row) continue;
           var statusEl = row.querySelector('.status');
-          if (statusEl) statusEl.textContent = statusText(m);
+          if (statusEl) {
+            var txt = statusText(m);
+            statusEl.textContent = txt;
+            if (txt.indexOf('away') !== -1) {
+              statusEl.style.color = 'var(--text-tertiary)';
+            } else {
+              statusEl.style.color = '';
+            }
+          }
           var weekEl = row.querySelector('.week');
           if (weekEl) weekEl.textContent = fmtDur(m.weekTotalMs) + ' this week';
           row.classList.toggle('studying', m.studying);
@@ -258,25 +308,29 @@
           if (timerEl) {
             if (m.studying) {
               timerEl.style.display = 'inline';
-              timerEl.textContent = fmtDur(Date.now() - m.startMs);
+              timerEl.textContent = fmtDur(elapsedSince(m.startMs));
             } else {
               timerEl.style.display = 'none';
             }
           }
         }
         if (me) {
-          document.getElementById('timer-status').textContent = me.studying
-            ? 'Studying · ' + fmtDur(Date.now() - me.startMs)
+          var studying = me.studying;
+          document.getElementById('timer-status').textContent = studying
+            ? 'Studying · ' + fmtDur(elapsedSince(me.startMs))
             : 'Not studying';
-          document.getElementById('start-btn').style.display = me.studying ? 'none' : 'inline-flex';
-          document.getElementById('stop-btn').style.display = me.studying ? 'inline-flex' : 'none';
-          if (me.studying && !heartbeatTimer) startHeartbeat();
-          if (!me.studying && heartbeatTimer) stopHeartbeat();
-          if (me.studying && window.absMiniTimer) {
-            window.absMiniTimer.show(me.startMs, GROUP_ID);
-          } else if (!me.studying && window.absMiniTimer) {
+          document.getElementById('start-btn').style.display = studying ? 'none' : 'inline-flex';
+          document.getElementById('stop-btn').style.display = studying ? 'inline-flex' : 'none';
+          if (studying && !heartbeatTimer) startHeartbeat();
+          if (!studying && heartbeatTimer) stopHeartbeat();
+          if (studying && window.absMiniTimer) {
+            window.absMiniTimer.show(me.startMs, GROUP_ID, serverNowMs, serverNowReceivedAt);
+          } else if (!studying && window.absMiniTimer) {
             window.absMiniTimer.hide();
           }
+          // Wake lock
+          if (studying && !wakeLock) requestWakeLock();
+          if (!studying && wakeLock) releaseWakeLock();
         }
       }
 
@@ -293,12 +347,21 @@
         reconnectStrip.style.display = show ? '' : 'none';
       }
 
+      var wsReconnectDelay = 1000;
+
       function connect() {
         var proto = location.protocol === 'https:' ? 'wss' : 'ws';
         var ws = new WebSocket(proto + '://' + location.host + '/ws/group/' + GROUP_ID);
-        ws.onopen = function() { showReconnecting(false); };
+        ws.onopen = function() {
+          showReconnecting(false);
+          wsReconnectDelay = 1000;
+        };
         ws.onmessage = function(e) {
           var msg = JSON.parse(e.data);
+          if (msg.server_now_ms !== undefined) {
+            serverNowMs = msg.server_now_ms;
+            serverNowReceivedAt = Date.now();
+          }
           if (msg.type === 'state') { members = msg.members; }
           else if (msg.type === 'update') {
             var found = false;
@@ -313,15 +376,80 @@
         };
         ws.onclose = function() {
           showReconnecting(true);
-          setTimeout(connect, 3000);
+          var delay = wsReconnectDelay;
+          wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+          setTimeout(connect, delay);
+          fetchSessionAndRender();
         };
+      }
+
+      function fetchSessionAndRender() {
+        fetch('/api/session/current')
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.server_now_ms !== undefined) {
+              serverNowMs = d.server_now_ms;
+              serverNowReceivedAt = Date.now();
+            }
+            if (d.session) {
+              var me = members.filter(function(m) { return m.userId === ME_ID; })[0];
+              if (me) {
+                me.studying = true;
+                me.startMs = d.session.start_ms;
+                me.lastHeartbeatMs = d.session.last_heartbeat_ms;
+                render();
+              }
+            }
+          })
+          .catch(function() {});
       }
 
       document.getElementById('start-btn').addEventListener('click', function() {
         fetch(GROUP_PATH + '/start', { method: 'POST' }).catch(function() {});
       });
+
       document.getElementById('stop-btn').addEventListener('click', function() {
-        fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
+        var me = members.filter(function(m) { return m.userId === ME_ID; })[0];
+        if (!me || !me.studying) return;
+        var elapsed = elapsedSince(me.startMs);
+        if (elapsed >= 10800000) {
+          showStopDialog(me.startMs);
+        } else {
+          fetch(GROUP_PATH + '/stop', { method: 'POST' }).catch(function() {});
+        }
+      });
+
+      function showStopDialog(startMs) {
+        var dialog = document.getElementById('stop-dialog');
+        var input = document.getElementById('stop-end-time');
+        var now = new Date();
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        var nowStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+        input.value = nowStr;
+        var minDate = new Date(startMs + 60000);
+        var minStr = minDate.getFullYear() + '-' + pad(minDate.getMonth()+1) + '-' + pad(minDate.getDate()) + 'T' + pad(minDate.getHours()) + ':' + pad(minDate.getMinutes());
+        input.min = minStr;
+        input.max = nowStr;
+        dialog.style.display = 'flex';
+      }
+
+      document.getElementById('stop-dialog-close').addEventListener('click', function() {
+        document.getElementById('stop-dialog').style.display = 'none';
+      });
+      document.getElementById('stop-dialog-cancel').addEventListener('click', function() {
+        document.getElementById('stop-dialog').style.display = 'none';
+      });
+      document.getElementById('stop-dialog-confirm').addEventListener('click', function() {
+        var input = document.getElementById('stop-end-time');
+        var val = input.value;
+        var endMs = new Date(val).getTime();
+        if (isNaN(endMs)) return;
+        fetch(GROUP_PATH + '/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'endMs=' + endMs
+        }).catch(function() {});
+        document.getElementById('stop-dialog').style.display = 'none';
       });
 
       // Nudge
@@ -348,9 +476,27 @@
         });
       });
 
-      setInterval(render, 1000);
+      // Reconnect / refetch on visibilitychange, pageshow, online
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          connect();
+          fetchSessionAndRender();
+          if (wakeLock === null) requestWakeLock();
+        }
+      });
+      window.addEventListener('pageshow', function() {
+        connect();
+        fetchSessionAndRender();
+      });
+      window.addEventListener('online', function() {
+        connect();
+        fetchSessionAndRender();
+      });
+
+      var renderInterval = setInterval(render, 1000);
       render();
       connect();
+      fetchSessionAndRender();
 
       // --- Dialogs ---
       var leaveDialog = document.getElementById('leave-dialog');
@@ -381,7 +527,6 @@
               setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
             }).catch(function() {});
           } else {
-            // fallback
             var ta = document.createElement('textarea');
             ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
             document.body.appendChild(ta); ta.select();

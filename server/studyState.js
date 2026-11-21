@@ -26,7 +26,7 @@ function weekTotalForUser(db, userId, weekStart) {
 function getMemberState(db, userId) {
   const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(userId);
   const active = db.prepare(
-    "SELECT start_ms FROM sessions WHERE user_id = ? AND end_ms IS NULL ORDER BY start_ms DESC LIMIT 1"
+    "SELECT start_ms, last_heartbeat_ms FROM sessions WHERE user_id = ? AND end_ms IS NULL ORDER BY start_ms DESC LIMIT 1"
   ).get(userId);
   const last = db.prepare(
     "SELECT end_ms FROM sessions WHERE user_id = ? AND end_ms IS NOT NULL ORDER BY end_ms DESC LIMIT 1"
@@ -38,6 +38,7 @@ function getMemberState(db, userId) {
     hasAvatar: !!user.avatar,
     studying: !!active,
     startMs: active ? active.start_ms : null,
+    lastHeartbeatMs: active ? active.last_heartbeat_ms : null,
     lastEndMs: last ? last.end_ms : null,
     weekTotalMs: weekTotalForUser(db, userId, getWeekStartIST(nowMs)),
   };

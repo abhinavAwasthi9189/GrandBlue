@@ -1,35 +1,42 @@
-# STATUS — Build step 6 done + systemd service + all UI steps + Avatar upload + Nudge real-time + Members tab cleanup
+# STATUS — Study session lifetime rework
 
 ## Changes
 
-### Avatar upload (long-press on You page avatar)
-- New column `avatar` on users table (INTEGER DEFAULT 0) + migration for existing DBs.
-- `POST /avatar` accepts a base64 data URL, saves as `data/avatars/{userId}.jpg`.
-- `GET /avatar/:userId` serves the image or 404.
-- `avatar` field included in `getMemberState()` (studyState.js) and all member queries (study.js, leetwars.js).
-- You page: conditional avatar rendering — `<img>` if set, colored circle + initial otherwise.
-- Long-press (mobile) or click (desktop) opens file picker → crop dialog with drag-to-pan, zoom slider, circular preview → saves to server.
-- Member list (group.ejs), study leaderboard (group-study.ejs), leetwars leaderboard/behind/solves (leetwars.ejs) all render custom avatars.
+### Study session lifetime rework
 
-### Members tab cleanup
-- Removed "last studied X ago" from member rows — only shows weekly total.
-- Weekly total text is bold (`.week { font-weight: 700 }`).
-- Studying members sorted first (already existed), now also get `.studying` class with accent-tinted background.
+- **Heartbeat-based cleanup removed**: sessions are no longer closed after 3 minutes without a heartbeat. `last_heartbeat_ms` is now only "last seen" info.
 
-### Notification prompts removed from group page
-- Notification permission prompt / "Turn on notifications" button removed from group.ejs entirely.
-- Notification management now only in You tab → Settings → Notifications.
+- **Max session duration**: `MAX_SESSION_HOURS` env var (default 6). A once-a-minute job closes sessions older than `start_ms + MAX_SESSION_HOURS`, setting `end_ms` to `start_ms + MAX_SESSION_HOURS`.
 
-### Nudge real-time via WebSocket
-- `study.js` exposes `broadcastToGroup` via fastify.decorate.
-- `push.js` broadcasts `{ type: 'nudge', fromUsername, targetUserId }` to the group over WebSocket after recording a nudge.
-- `group.ejs` WebSocket handler shows a toast ("{user} nudged you!") when the target receives a nudge.
+- **Start closes previous session**: starting a new session now first closes any existing open session (instead of returning 400 "already studying").
 
-### Stats display fix
-- Stats fetch error catch now shows "-" instead of "Error" for new users with no data.
+- **Stop route accepts `endMs`**: the `POST /group/:id/stop` handler accepts an optional `endMs` body parameter for the "Did you stop earlier?" dialog. Validated: not before `start + 1 min`, not in the future; falls back to `Date.now()`.
+
+- **`GET /api/session/current`**: new endpoint returning `{ session: { start_ms, last_heartbeat_ms } | null, server_now_ms }`.
+
+- **`server_now_ms` in all state messages**: every WebSocket `state`/`update` message and the initial WS handshake include `server_now_ms`. The client computes elapsed time as `(server_now_ms - start_ms) + (Date.now() - received_at)`.
+
+- **`getMemberState` now includes `lastHeartbeatMs`**: the client uses it to show a muted "away" hint when last seen is > 10 min.
+
+- **WebSocket exponential backoff**: reconnection delay starts at 1 s, doubles per attempt, capped at 30 s. Resets to 1 s on successful open.
+
+- **Session/state refetch on visibility**: `visibilitychange` (to visible), `pageshow`, and `online` events trigger a WebSocket reconnect and a call to `GET /api/session/current`. No auto-stop on `pagehide` or `beforeunload`.
+
+- **Screen Wake Lock**: requested via `navigator.wakeLock.request('screen')` inside try/catch when studying, re-requested on visibility visible, released on Stop.
+
+- **Stop dialog for old sessions**: if a session is >= 3 hours old, tapping Stop shows a dialog with a `datetime-local` input. Defaults to now, min = `start + 1 min`, max = now.
+
+- **Mini-timer uses server time**: `absMiniTimer.show()` now accepts `serverNowMs` and `serverNowReceivedAt` to align the mini-timer with server time.
+
+### Modified files
+- `server/study.js` — rewritten cleanup, new stop body param, new API, server_now_ms in WS messages
+- `server/studyState.js` — `lastHeartbeatMs` added to `getMemberState`
+- `views/group.ejs` — all client changes (WS backoff, wake lock, stop dialog, server time calc, refetch on visibility)
+- `views/_layout_close.ejs` — mini-timer uses server time when available
+- `specs.md` — study timer section updated
 
 ## Run
-`node server/index.js` — listens on `0.0.0.0:3000` (or `$PORT`)
+`node server/index.js` — listens on `127.0.0.1:3000` (or `$PORT`)
 
 Set these env vars for push notifications:
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
@@ -303,6 +310,28 @@ sudo journalctl -u abs -f                                       # follow logs
 3. If "Saved on server" shows `no` but the browser has a subscription, click **"Re-subscribe"** — it unsubscribes, subscribes fresh, and saves to the server.
 4. Click **"Send test notification to me"** to fire a test push. The results table shows each subscription's id, host, status code, and error. Status 201 = delivered to the push service. 404/410 = stale subscription (auto-deleted). Other codes = push service rejected it (check VAPID keys, endpoint validity).
 5. If no notification arrives after a 201, check: device notifications are enabled in the OS, the browser has notification permission, and the PWA is installed (not just a browser tab on iOS).
+
+## How to test by hand
+
+1. **Start a session**: open a group page, tap "Start studying". Verify the timer counts up and `GET /api/session/current` returns `{ session: { start_ms, last_heartbeat_ms }, server_now_ms }`.
+
+2. **Stop a session (< 3h)**: tap "Stop" within 3 hours of starting. Verify the timer stops and the session state returns to "Not studying". Check `GET /api/session/current` returns `{ session: null, server_now_ms }`.
+
+3. **Stop dialog (> 3h)**: set `MAX_SESSION_HOURS=0.1` in `.env`, restart, start a session, wait 6+ minutes (10% of 1h = 6 min), tap Stop. Verify the "Did you stop earlier?" dialog appears with a time picker. Pick a time 2 minutes ago, confirm. Verify the session closes with that end time.
+
+4. **Start closes previous**: while studying in group A, tap Start on group B. Verify the previous session is closed (end_ms set to now) and a new session starts.
+
+5. **Max-duration cleanup**: set `MAX_SESSION_HOURS=0.001` (~3.6 seconds) in `.env`, start a session, wait 5 seconds. Verify the session is auto-closed at `start_ms + 3.6 s` and the timer stops.
+
+6. **WebSocket disconnect**: start studying, kill the server (`Ctrl+C`), wait for "Reconnecting…" to show, restart the server. Verify the WebSocket reconnects within 30 s (exponential backoff 1 s → 2 s → 4 s → … → 30 s), and the timer continues counting from the server time.
+
+7. **Tab hidden then visible**: start studying, switch to another tab for 10+ seconds, come back. Verify the timer is correct (no jump from local clock drift) and the WebSocket reconnected.
+
+8. **Away hint**: start studying, stop the heartbeat (block `/group/:id/heartbeat` in dev tools or kill the network). After 10+ minutes, verify the member's status shows "Studying · away" in muted color.
+
+9. **Screen Wake Lock**: on a device that supports it (Chrome desktop/mobile), start studying, verify the screen does not turn off. Tap Stop, verify the lock is released.
+
+10. **`server_now_ms` accuracy**: open the WebSocket in browser dev tools Network tab. Verify every WS message contains `server_now_ms`. Compare local `Date.now()` vs `server_now_ms` — they should be close.
 
 ### Known problems (unchanged)
 - Session cookie invalidated on server restart (dev secret changes). Set `SESSION_SECRET` env var.
