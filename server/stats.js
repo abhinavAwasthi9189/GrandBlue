@@ -22,9 +22,9 @@ function getStreak(db, userId) {
     const dayStart = todayStart - i * DAY_MS;
     const dayEnd = dayStart + DAY_MS;
     const dayTotal = db.prepare(`
-      SELECT COALESCE(SUM(MIN(COALESCE(end_ms, ?), dayEnd) - MAX(start_ms, dayStart)), 0) AS total
-      FROM sessions WHERE user_id = ? AND start_ms < dayEnd AND (end_ms IS NULL OR end_ms > dayStart)
-    `).get(dayEnd, userId, dayEnd, dayStart).total;
+      SELECT COALESCE(SUM(MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)), 0) AS total
+      FROM sessions WHERE user_id = ? AND start_ms < ? AND (end_ms IS NULL OR end_ms > ?)
+    `).get(dayEnd, dayEnd, dayStart, userId, dayEnd, dayStart).total;
     if (dayTotal > 0) { streak++; }
     else if (i > 0) break;
     else { streak = 0; break; }
@@ -34,18 +34,21 @@ function getStreak(db, userId) {
 }
 
 function getBestWeek(db, userId) {
-  const now = Date.now();
-  const best = db.prepare(`
-    WITH weeks AS (
-      SELECT
-        ((start_ms + ?) / ?) AS week_num,
-        COALESCE(SUM(MIN(COALESCE(end_ms, ?), (week_num + 1) * ? - ?) - MAX(start_ms, week_num * ? - ?)), 0) AS total_ms
-      FROM sessions WHERE user_id = ? AND end_ms IS NOT NULL
-      GROUP BY week_num
-    )
-    SELECT MAX(total_ms) AS best FROM weeks
-  `).get(5.5 * 60 * 60 * 1000, WEEK_MS, now, WEEK_MS, 5.5 * 60 * 60 * 1000, WEEK_MS, 5.5 * 60 * 60 * 1000, userId);
-  return best.best || 0;
+  const sessions = db.prepare(
+    'SELECT start_ms, end_ms FROM sessions WHERE user_id = ? AND end_ms IS NOT NULL'
+  ).all(userId);
+  const weekTotals = {};
+  for (const s of sessions) {
+    const wn = Math.floor((s.start_ms + 5.5 * 3600000) / WEEK_MS);
+    const ws = wn * WEEK_MS - 5.5 * 3600000;
+    const we = ws + WEEK_MS;
+    const start = Math.max(s.start_ms, ws);
+    const end = Math.min(s.end_ms, Math.min(we, Date.now()));
+    if (end > start) {
+      weekTotals[wn] = (weekTotals[wn] || 0) + (end - start);
+    }
+  }
+  return Math.max(0, ...Object.values(weekTotals));
 }
 
 function getLast8Weeks(db, userId) {

@@ -1,4 +1,5 @@
 const { getWeekStartIST, WEEK_MS, isActiveMember } = require('./studyState');
+const { GROUP_COLORS } = require('./colors');
 
 const LEETCODE_API = 'https://leetcode.com/graphql';
 const POLL_INTERVAL_MS = 20 * 60 * 1000;
@@ -112,11 +113,14 @@ function startPoller(fastify) {
 function getDailyLeetwars(db, groupId, weekStart) {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const members = db.prepare(`
-    SELECT u.id, u.username, u.leetcode_username, u.avatar
+    SELECT u.id AS userId, u.username, u.leetcode_username, u.avatar, m.color_index
     FROM memberships m JOIN users u ON u.id = m.user_id
     WHERE m.group_id = ? AND m.status = 'active'
     ORDER BY u.username
-  `).all(groupId);
+  `).all(groupId).map(m => ({
+    ...m,
+    color: GROUP_COLORS[m.color_index] || GROUP_COLORS[0],
+  }));
 
   const days = [];
   for (let d = 0; d < 7; d++) {
@@ -128,18 +132,18 @@ function getDailyLeetwars(db, groupId, weekStart) {
       const solves = db.prepare(`
         SELECT difficulty FROM solved_problems
         WHERE user_id = ? AND solved_at_ms >= ? AND solved_at_ms < ?
-      `).all(m.id, dayStart, dayEnd);
+      `).all(m.userId, dayStart, dayEnd);
       const xp = solves.reduce((sum, s) => sum + (XP_MAP[s.difficulty] || 0), 0);
-      return { userId: m.id, username: m.username, xp, solves: solves.length };
+      return { userId: m.userId, username: m.username, xp, solves: solves.length };
     });
     days.push({ label, data: dayData });
   }
-  return { days, members: members.map(m => ({ userId: m.id, username: m.username, leetcode_username: m.leetcode_username, hasAvatar: !!m.avatar })) };
+  return { days, members: members.map(m => ({ userId: m.userId, username: m.username, leetcode_username: m.leetcode_username, hasAvatar: !!m.avatar, color: m.color })) };
 }
 
 function getLeaderboard(db, groupId, weekStart, weekEnd) {
   return db.prepare(`
-    SELECT u.id, u.username, u.leetcode_username, u.avatar,
+    SELECT u.id, u.username, u.leetcode_username, u.avatar, m.color_index,
       COALESCE(SUM(CASE sp.difficulty WHEN 'Easy' THEN 10 WHEN 'Medium' THEN 25 WHEN 'Hard' THEN 50 END), 0) AS xp,
       COUNT(sp.slug) AS solved_count
     FROM memberships m
@@ -149,7 +153,10 @@ function getLeaderboard(db, groupId, weekStart, weekEnd) {
     WHERE m.group_id = ? AND m.status = 'active'
     GROUP BY u.id
     ORDER BY xp DESC, u.username
-  `).all(weekStart, weekEnd, groupId);
+  `).all(weekStart, weekEnd, groupId).map(r => ({
+    ...r,
+    color: GROUP_COLORS[r.color_index] || GROUP_COLORS[0],
+  }));
 }
 
 function getMemberSolves(db, userId, weekStart, weekEnd) {
@@ -235,9 +242,9 @@ module.exports = async function (fastify, opts) {
     const behind = [];
     for (const e of leaderboard) {
       if (e.leetcode_username && e.solved_count < quota) {
-        behind.push({ id: e.id, username: e.username, avatar: e.avatar, solved: e.solved_count, owed: quota - e.solved_count, notLinked: false });
+        behind.push({ id: e.id, username: e.username, avatar: e.avatar, color: e.color, solved: e.solved_count, owed: quota - e.solved_count, notLinked: false });
       } else if (!e.leetcode_username) {
-        behind.push({ id: e.id, username: e.username, avatar: e.avatar, solved: 0, owed: quota, notLinked: true });
+        behind.push({ id: e.id, username: e.username, avatar: e.avatar, color: e.color, solved: 0, owed: quota, notLinked: true });
       }
     }
 

@@ -275,7 +275,7 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 
   .tab-bar { display: none; }
   .fab { bottom: var(--space-lg); }
   .toast { bottom: var(--space-lg); }
-  .app-main.wide { max-width: var(--max-content); margin-left: auto; margin-right: auto; width: 100%; }
+  .app-main.wide { max-width: calc(100vw - var(--sidebar-width) - 48px); margin-left: auto; margin-right: auto; width: 100%; }
   .dialog-overlay { align-items: center; }
   .dialog-overlay .dialog-content { border-radius: var(--radius-lg); max-width: 420px; box-shadow: var(--shadow-lg); animation: scaleIn 0.2s ease; }
 

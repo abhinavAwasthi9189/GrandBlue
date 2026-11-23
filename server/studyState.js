@@ -1,5 +1,6 @@
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const { GROUP_COLORS } = require('./colors');
 
 function getWeekStartIST(nowMs = Date.now()) {
   const ist = new Date(nowMs + IST_OFFSET);
@@ -52,10 +53,14 @@ function isActiveMember(db, groupId, userId) {
 
 function getActiveMembers(db, groupId) {
   return db.prepare(`
-    SELECT u.id, m.role
+    SELECT u.id, m.role, m.color_index
     FROM memberships m JOIN users u ON u.id = m.user_id
     WHERE m.group_id = ? AND m.status = 'active' ORDER BY m.created_at
-  `).all(groupId);
+  `).all(groupId).map(r => ({
+    id: r.id,
+    role: r.role,
+    color: GROUP_COLORS[r.color_index] || GROUP_COLORS[0],
+  }));
 }
 
 function weekTotalsForGroup(db, groupId, weekStart, weekEnd) {

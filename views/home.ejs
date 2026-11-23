@@ -43,7 +43,7 @@
   <% } else { %>
     <div class="group-cards" style="margin-bottom:var(--space-md)">
       <% myGroups.forEach(function(g) { %>
-        <div class="card" style="margin-bottom:var(--space-sm);cursor:pointer" onclick="window.location='/group/<%= g.id %>'">
+        <a href="/group/<%= g.id %>" class="card" style="margin-bottom:var(--space-sm);display:block;text-decoration:none;color:inherit">
           <div style="display:flex;align-items:flex-start;justify-content:space-between">
             <div>
               <div style="font-weight:600;font-size:var(--font-lg)"><%= g.name %></div>
@@ -61,7 +61,7 @@
               <div style="color:var(--text-tertiary)">this week</div>
             </div>
           </div>
-        </div>
+        </a>
       <% }); %>
     </div>
 

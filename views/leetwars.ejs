@@ -1,9 +1,4 @@
 <%
-function hueFromId(id) {
-  var hash = 0;
-  for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
-  return ((hash % 360) + 360) % 360;
-}
 function ago(ms) {
   var s = Math.floor((Date.now() - ms) / 1000);
   if (s < 60) return s + 's ago';
@@ -99,7 +94,6 @@ function ago(ms) {
       <% } else { %>
         <% var leaderXp = leaderboard.length > 0 ? leaderboard[0].xp : 1; %>
         <% leaderboard.forEach(function(e, i) { %>
-          <% var hue = hueFromId(e.id); %>
           <% var isMe = e.id === session.userId; %>
           <% var barPct = Math.round(e.xp / leaderXp * 100); %>
           <div style="display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) 0">
@@ -107,7 +101,7 @@ function ago(ms) {
             <% if (e.avatar) { %>
               <img src="/avatar/<%= e.id %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">
             <% } else { %>
-            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= e.username.charAt(0).toUpperCase() %></div>
+            <div class="avatar avatar-sm" style="background:<%= e.color %>;width:28px;height:28px;font-size:11px"><%= e.username.charAt(0).toUpperCase() %></div>
             <% } %>
             <div style="flex:1;min-width:0">
               <div style="font-weight:<%= isMe ? '700' : '500' %>;font-size:var(--font-sm)">
@@ -115,7 +109,7 @@ function ago(ms) {
                 <% if (!e.leetcode_username) { %><span class="chip" style="font-size:10px;padding:1px 6px;background:var(--warning-light);color:var(--warning)">unlinked</span><% } %>
               </div>
               <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);height:6px;overflow:hidden;margin-top:4px">
-                <div style="height:100%;border-radius:var(--radius-full);background:hsl(<%= hue %>,55%,50%);width:<%= barPct %>%"></div>
+                <div style="height:100%;border-radius:var(--radius-full);background:<%= e.color %>;width:<%= barPct %>%"></div>
               </div>
             </div>
             <span style="font-family:var(--font-mono);font-size:var(--font-sm);font-weight:600;text-align:right;min-width:48px"><%= e.xp %> XP</span>
@@ -129,7 +123,7 @@ function ago(ms) {
     <div class="card" style="margin-bottom:var(--space-lg);height:calc(100vh - 420px);min-height:200px;max-height:600px;display:flex;flex-direction:column">
       <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Daily XP comparison</h2>
       <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);margin-bottom:var(--space-md)"></div>
-      <div style="flex:1;min-height:0;position:relative"><canvas id="leetwars-chart"></canvas></div>
+      <div style="flex:1;min-height:0;position:relative;max-width:min(66vw,100%)"><canvas id="leetwars-chart"></canvas></div>
     </div>
 
     </div>
@@ -145,11 +139,10 @@ function ago(ms) {
         <% } else { %>
           <% behind.forEach(function(b) { %>
             <div class="list-row">
-              <% var hue = hueFromId(b.id); %>
               <% if (b.avatar) { %>
               <img src="/avatar/<%= b.id %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">
             <% } else { %>
-            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:28px;height:28px;font-size:11px"><%= b.username.charAt(0).toUpperCase() %></div>
+            <div class="avatar avatar-sm" style="background:<%= b.color %>;width:28px;height:28px;font-size:11px"><%= b.username.charAt(0).toUpperCase() %></div>
             <% } %>
               <div class="row-main">
                 <div class="row-label" style="font-size:var(--font-sm)"><%= b.username %></div>
@@ -172,19 +165,18 @@ function ago(ms) {
       <!-- Recent solves feed -->
       <div class="card">
         <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Recent solves</h2>
-        <% var allSolves = []; leaderboard.forEach(function(e) { (solvesMap[e.id] || []).forEach(function(s) { allSolves.push({ userId: e.id, username: e.username, avatar: e.avatar, slug: s.slug, difficulty: s.difficulty, solvedAt: s.solved_at_ms }); }); }); %>
+        <% var allSolves = []; leaderboard.forEach(function(e) { (solvesMap[e.id] || []).forEach(function(s) { allSolves.push({ userId: e.id, username: e.username, avatar: e.avatar, color: e.color, slug: s.slug, difficulty: s.difficulty, solvedAt: s.solved_at_ms }); }); }); %>
         <% allSolves.sort(function(a, b) { return b.solvedAt - a.solvedAt; }); %>
         <% if (allSolves.length === 0) { %>
           <div class="empty-state"><div class="empty-state-text">No solves this week yet.</div></div>
         <% } else { %>
           <% allSolves.slice(0, 20).forEach(function(s) { %>
-            <% var hue = hueFromId(s.userId); %>
             <% var diffClass = s.difficulty === 'Easy' ? 'chip-accent' : s.difficulty === 'Medium' ? 'chip-warning' : 'chip-danger'; %>
             <div class="list-row" style="font-size:var(--font-sm)">
               <% if (s.avatar) { %>
               <img src="/avatar/<%= s.userId %>" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
             <% } else { %>
-            <div class="avatar avatar-sm" style="background:hsl(<%= hue %>,55%,50%);width:24px;height:24px;font-size:10px"><%= s.username.charAt(0).toUpperCase() %></div>
+            <div class="avatar avatar-sm" style="background:<%= s.color %>;width:24px;height:24px;font-size:10px"><%= s.username.charAt(0).toUpperCase() %></div>
             <% } %>
               <div class="row-main">
                 <div class="row-label">
@@ -206,12 +198,6 @@ function ago(ms) {
 (function() {
   var GROUP_ID = <%= group.id %>;
   var ME_ID = <%= session.userId %>;
-
-  function hueFromId(id) {
-    var hash = 0;
-    for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
-    return ((hash % 360) + 360) % 360;
-  }
 
   function getMondayIST(ms) {
     var offset = 5.5 * 3600000;
@@ -255,8 +241,7 @@ function ago(ms) {
     var labels = d.days.map(function(day) { return day.label; });
 
     d.members.forEach(function(m) {
-      var hue = hueFromId(m.userId);
-      var color = 'hsl(' + hue + ', 55%, 50%)';
+      var color = m.color;
       var item = document.createElement('span');
       item.className = 'chip';
       item.style.cssText = 'cursor:pointer;transition:opacity 0.15s';
@@ -266,7 +251,6 @@ function ago(ms) {
     });
 
     var datasets = d.members.map(function(m) {
-      var hue = hueFromId(m.userId);
       var isMe = m.userId === ME_ID;
       var vals = d.days.map(function(day) {
         var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
@@ -275,8 +259,8 @@ function ago(ms) {
       return {
         label: m.username,
         data: vals,
-        borderColor: 'hsl(' + hue + ', 55%, 50%)',
-        backgroundColor: 'hsl(' + hue + ', 55%, 50%)',
+        borderColor: m.color,
+        backgroundColor: m.color,
         borderWidth: isMe ? 4 : 2,
         pointRadius: isMe ? 4 : 3,
         pointHoverRadius: 6,
@@ -291,7 +275,7 @@ function ago(ms) {
       type: 'line',
       data: { labels: labels, datasets: datasets },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, 
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -332,15 +316,15 @@ function ago(ms) {
     }
   });
 
-  // Load this week
-  loadWeek(currentWeekStart);
-
   // --- LeetCode link/unlink ---
   var formEl = document.getElementById('lc-form');
   var inputEl = document.getElementById('lc-input');
-  var msgEl = document.getElementById('lc-msg');
+  var hasLeetcode = <%= hasLeetcode ? 'true' : 'false' %>;
+  var msgEl = hasLeetcode ? document.getElementById('lc-edit-msg') : document.getElementById('lc-msg');
   var unlinkBtn = document.getElementById('unlink-btn');
   var changeBtn = document.getElementById('change-btn');
+
+  if (hasLeetcode) loadWeek(currentWeekStart);
 
   function onSubmit(e) {
     e.preventDefault();

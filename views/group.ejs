@@ -50,13 +50,11 @@
     <!-- Members tab content -->
     <div id="members-tab">
       <% members.forEach(function(m) { %>
-        <% var hash = 0; for (var i = 0; i < String(m.userId).length; i++) { hash = ((hash << 5) - hash) + String(m.userId).charCodeAt(i); hash |= 0; } %>
-        <% var hue = ((hash % 360) + 360) % 360; %>
           <div class="list-row" data-user="<%= m.userId %>">
           <% if (m.hasAvatar) { %>
             <img class="avatar" src="/avatar/<%= m.userId %>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover">
           <% } else { %>
-          <div class="avatar" style="background:hsl(<%= hue %>, 55%, 50%)"><%= m.username.charAt(0).toUpperCase() %></div>
+          <div class="avatar" style="background:<%= m.color %>"><%= m.username.charAt(0).toUpperCase() %></div>
           <% } %>
           <div class="row-main">
             <div class="row-label">

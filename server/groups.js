@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const studyState = require('./studyState');
 const rateLimit = require('./rateLimit');
+const { assignColorIndex, GROUP_COLORS } = require('./colors');
 
 const inviteRL = rateLimit({ max: 10, windowMs: 60_000, keyFn: req => req.ip + ':' + (req.body && req.body.username || '') });
 
@@ -27,7 +28,7 @@ module.exports = async function (fastify, opts) {
       ).run(name.trim(), req.session.userId, quota, now);
 
       fastify.db.prepare(
-        'INSERT INTO memberships (group_id, user_id, role, status, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO memberships (group_id, user_id, role, status, created_at, color_index) VALUES (?, ?, ?, ?, ?, 0)'
       ).run(info.lastInsertRowid, req.session.userId, 'admin', 'active', now);
     });
     insert();
@@ -54,6 +55,7 @@ module.exports = async function (fastify, opts) {
       members = studyState.getActiveMembers(fastify.db, req.params.id).map(m => ({
         ...studyState.getMemberState(fastify.db, m.id),
         role: m.role,
+        color: m.color,
       }));
     }
 
@@ -105,7 +107,7 @@ module.exports = async function (fastify, opts) {
       });
     }
     const allMembers = studyState.getActiveMembers(fastify.db, req.params.id).map(m => ({
-      ...studyState.getMemberState(fastify.db, m.id), role: m.role,
+      ...studyState.getMemberState(fastify.db, m.id), role: m.role, color: m.color,
     }));
 
     const pendingInviteCount = fastify.db.prepare(
@@ -249,9 +251,10 @@ module.exports = async function (fastify, opts) {
         throw new Error('Group is full (max 15 active members)');
       }
 
+      const colorIndex = assignColorIndex(fastify.db, req.params.id);
       fastify.db.prepare(
-        "UPDATE memberships SET status = 'active' WHERE group_id = ? AND user_id = ?"
-      ).run(req.params.id, req.params.userId);
+        "UPDATE memberships SET status = 'active', color_index = ? WHERE group_id = ? AND user_id = ?"
+      ).run(colorIndex, req.params.id, req.params.userId);
     });
 
     try {
@@ -291,9 +294,10 @@ module.exports = async function (fastify, opts) {
         throw new Error('Group is full (max 15 active members)');
       }
 
+      const colorIndex = assignColorIndex(fastify.db, req.params.groupId);
       fastify.db.prepare(
-        "UPDATE memberships SET status = 'active' WHERE group_id = ? AND user_id = ?"
-      ).run(req.params.groupId, req.session.userId);
+        "UPDATE memberships SET status = 'active', color_index = ? WHERE group_id = ? AND user_id = ?"
+      ).run(colorIndex, req.params.groupId, req.session.userId);
     });
 
     try {

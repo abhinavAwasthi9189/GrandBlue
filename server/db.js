@@ -97,4 +97,17 @@ db.exec(`
 // Migration: add avatar column for existing databases
 try { db.exec('ALTER TABLE users ADD COLUMN avatar INTEGER NOT NULL DEFAULT 0'); } catch (e) {}
 
+// Migration: add color_index to memberships
+try { db.exec('ALTER TABLE memberships ADD COLUMN color_index INTEGER'); } catch (e) {}
+// Backfill color_index for existing active members by join order per group
+const { assignColorIndex } = require('./colors');
+const missingColors = db.prepare(
+  "SELECT group_id, user_id FROM memberships WHERE status = 'active' AND color_index IS NULL ORDER BY group_id, created_at"
+).all();
+for (const row of missingColors) {
+  const ci = assignColorIndex(db, row.group_id);
+  db.prepare('UPDATE memberships SET color_index = ? WHERE group_id = ? AND user_id = ?')
+    .run(ci, row.group_id, row.user_id);
+}
+
 module.exports = db;

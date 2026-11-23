@@ -1,5 +1,6 @@
 const { WebSocketServer } = require('ws');
 const { getWeekStartIST, WEEK_MS, getMemberState, isActiveMember, getActiveMembers } = require('./studyState');
+const { GROUP_COLORS } = require('./colors');
 
 const MAX_SESSION_MS = (parseFloat(process.env.MAX_SESSION_HOURS) || 6) * 3600000;
 const CLEANUP_INTERVAL = 60 * 1000;
@@ -63,7 +64,10 @@ module.exports = async function (fastify, opts) {
         userDisconnectedAt.delete(session.userId);
         ws.send(JSON.stringify(Object.assign({
           type: 'state',
-          members: getActiveMembers(db, groupId).map(r => getMemberState(db, r.id)),
+          members: getActiveMembers(db, groupId).map(a => ({
+            ...getMemberState(db, a.id),
+            color: a.color,
+          })),
         }, statePayload(db))));
         ws.on('close', () => {
           const set = connections.get(groupId);
@@ -93,11 +97,18 @@ module.exports = async function (fastify, opts) {
 
   function broadcastUser(userId) {
     const groups = db.prepare(
-      "SELECT group_id FROM memberships WHERE user_id = ? AND status = 'active'"
+      "SELECT m.group_id, m.color_index FROM memberships m WHERE m.user_id = ? AND m.status = 'active'"
     ).all(userId);
     const state = getMemberState(db, userId);
-    const payload = Object.assign({ type: 'update', member: state }, statePayload(db));
-    for (const g of groups) broadcast(g.group_id, payload);
+    for (const g of groups) {
+      const payload = Object.assign({
+        type: 'update',
+        member: Object.assign({}, state, {
+          color: GROUP_COLORS[g.color_index] || GROUP_COLORS[0],
+        }),
+      }, statePayload(db));
+      broadcast(g.group_id, payload);
+    }
   }
 
   fastify.post('/group/:id/start', async (req, reply) => {
@@ -162,11 +173,14 @@ module.exports = async function (fastify, opts) {
 
   function dailyTotalsForGroup(db, groupId, weekStart) {
     const members = db.prepare(`
-      SELECT u.id, u.username, u.avatar
+      SELECT u.id, u.username, u.avatar, m.color_index
       FROM memberships m JOIN users u ON u.id = m.user_id
       WHERE m.group_id = ? AND m.status = 'active'
       ORDER BY u.username
-    `).all(groupId);
+    `).all(groupId).map(m => ({
+      ...m,
+      color: GROUP_COLORS[m.color_index] || GROUP_COLORS[0],
+    }));
 
     const now = Date.now();
     const days = [];
@@ -191,7 +205,7 @@ module.exports = async function (fastify, opts) {
 
       days.push({ label: dayLabel, data: dayData });
     }
-    return { days, members: members.map(m => ({ userId: m.id, username: m.username, hasAvatar: !!m.avatar })) };
+    return { days, members: members.map(m => ({ userId: m.id, username: m.username, hasAvatar: !!m.avatar, color: m.color })) };
   }
 
   fastify.get('/api/group/:id/study/daily', async (req, reply) => {

@@ -1,11 +1,6 @@
-const CACHE = 'abs-shell-v2';
 const SW_VERSION = 'sw-v2';
-const ASSETS = ['/', '/login', '/register'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS))
-  );
   self.skipWaiting();
 });
 
@@ -14,27 +9,12 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  const { request } = e;
-  const url = new URL(request.url);
-
-  if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/group/') || url.pathname.startsWith('/push/') || url.pathname.startsWith('/api/')) {
-    return;
-  }
-
-  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-
-  e.respondWith(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request).then((res) => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, clone));
-        }
-        return res;
-      });
-      return cached || fetchPromise;
-    })
-  );
+  const url = new URL(e.request.url);
+  // Only intercept non-HTML static assets for caching
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  const isHTML = e.request.headers.get('Accept')?.includes('text/html');
+  if (isHTML) return;  // HTML pages are auth-dependent — always go to network
+  e.respondWith(fetch(e.request));
 });
 
 self.addEventListener('push', (e) => {

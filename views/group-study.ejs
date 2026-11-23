@@ -8,11 +8,6 @@ function formatDur(ms) {
   if (m > 0) return m + 'm ' + (s % 60) + 's';
   return s + 's';
 }
-function hueFromId(id) {
-  var hash = 0;
-  for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
-  return ((hash % 360) + 360) % 360;
-}
 %><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,7 +49,7 @@ function hueFromId(id) {
   <div class="card" style="margin-bottom:var(--space-lg);height:calc(100vh - 420px);min-height:200px;max-height:600px;display:flex;flex-direction:column">
     <h2 style="font-size:var(--font-lg);font-weight:600;margin-bottom:var(--space-md)">Daily comparison</h2>
     <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);margin-bottom:var(--space-md)"></div>
-    <div style="flex:1;min-height:0;position:relative"><canvas id="study-chart"></canvas></div>
+    <div style="flex:1;min-height:0;position:relative;max-width:min(66vw,100%)"><canvas id="study-chart"></canvas></div>
   </div>
 
   </div>
@@ -91,12 +86,6 @@ function hueFromId(id) {
 (function() {
   var GROUP_ID = <%= group.id %>;
   var ME_ID = <%= session.userId %>;
-
-  function hueFromId(id) {
-    var hash = 0;
-    for (var i = 0; i < String(id).length; i++) { hash = ((hash << 5) - hash) + String(id).charCodeAt(i); hash |= 0; }
-    return ((hash % 360) + 360) % 360;
-  }
 
   function fmtDur(ms) {
     if (ms < 0) ms = 0;
@@ -172,7 +161,6 @@ function hueFromId(id) {
     var container = document.getElementById('leaderboard-rows');
     container.innerHTML = '';
     sorted.forEach(function(m, idx) {
-      var hue = hueFromId(m.userId);
       var pct = leaderMs > 0 ? Math.round(totals[m.userId] / leaderMs * 100) : 0;
       var isMe = m.userId === ME_ID;
       var row = document.createElement('div');
@@ -181,11 +169,11 @@ function hueFromId(id) {
         '<span style="width:20px;text-align:center;font-weight:600;font-size:var(--font-sm);color:var(--text-secondary)">' + (idx + 1) + '</span>' +
         (m.hasAvatar
           ? '<img src="/avatar/' + m.userId + '" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">'
-          : '<div class="avatar avatar-sm" style="background:hsl(' + hue + ',55%,50%);width:28px;height:28px;font-size:11px">' + m.username.charAt(0).toUpperCase() + '</div>') +
+          : '<div class="avatar avatar-sm" style="background:' + m.color + ';width:28px;height:28px;font-size:11px">' + m.username.charAt(0).toUpperCase() + '</div>') +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-weight:' + (isMe ? '700' : '500') + ';font-size:var(--font-sm)">' + m.username + (isMe ? ' <span style="color:var(--text-tertiary);font-weight:400">(you)</span>' : '') + '</div>' +
           '<div style="background:var(--bg-tertiary);border-radius:var(--radius-full);height:6px;overflow:hidden;margin-top:4px">' +
-            '<div style="height:100%;border-radius:var(--radius-full);background:hsl(' + hue + ',55%,50%);width:' + pct + '%"></div>' +
+            '<div style="height:100%;border-radius:var(--radius-full);background:' + m.color + ';width:' + pct + '%"></div>' +
           '</div>' +
         '</div>' +
         '<span style="font-family:var(--font-mono);font-size:var(--font-sm);font-weight:600">' + fmtDayMinutes(totals[m.userId]) + '</span>';
@@ -200,8 +188,7 @@ function hueFromId(id) {
     var hidden = {};
 
     d.members.forEach(function(m) {
-      var hue = hueFromId(m.userId);
-      var color = 'hsl(' + hue + ', 55%, 50%)';
+      var color = m.color;
       var isMe = m.userId === ME_ID;
       var vals = d.days.map(function(day) {
         var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
@@ -219,7 +206,6 @@ function hueFromId(id) {
 
     // Build datasets
     var datasets = d.members.map(function(m) {
-      var hue = hueFromId(m.userId);
       var isMe = m.userId === ME_ID;
       var vals = d.days.map(function(day) {
         var found = day.data.filter(function(pt) { return pt.userId === m.userId; });
@@ -228,8 +214,8 @@ function hueFromId(id) {
       return {
         label: m.username,
         data: vals,
-        borderColor: 'hsl(' + hue + ', 55%, 50%)',
-        backgroundColor: 'hsl(' + hue + ', 55%, 50%)',
+        borderColor: m.color,
+        backgroundColor: m.color,
         borderWidth: isMe ? 4 : 2,
         pointRadius: isMe ? 4 : 3,
         pointHoverRadius: 6,
@@ -244,7 +230,7 @@ function hueFromId(id) {
       type: 'line',
       data: { labels: labels, datasets: datasets },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, 
         plugins: {
           legend: { display: false },
           tooltip: {
