@@ -35,6 +35,29 @@
 - `views/_layout_close.ejs` — mini-timer uses server time when available
 - `specs.md` — study timer section updated
 
+### Join-by-code fix, onboarding popups, push notifications for invites/requests
+
+- **POST /join route added**: join form on home now works (was hitting 404 before). Redirects to `/join/:code` logic with success/error view. Push notification sent to all group admins when someone requests to join via code.
+
+- **GET /join/:code** now also sends admin notification.
+
+- **Push on invite**: when admin invites a user by username, the invited user gets a push notification.
+
+- **Push on approve**: when admin approves a join request, the approved user gets notified.
+
+- **Push on accept**: when a user accepts an invite, group admins are notified.
+
+- **`sendPush` decorate**: `push.js` now exposes `fastify.sendPush(userId, title, body, url)` for reuse across the app.
+
+- **Onboarding popups on home page**: after login, two sequential popups appear via a timed dialog:
+  1. **Turn on notifications** card — uses same subscribe logic as You tab (SW registration, VAPID key, push subscribe). "Later" dismisses via `sessionStorage` (per-session).
+  2. **Link LeetCode** card — "Link" goes to `/you`, "Later" dismisses per session.
+
+### Modified files
+- `server/groups.js` — `joinByCode` helper, POST /join, push notifications on invite/join/approve/accept
+- `server/push.js` — `sendPush` helper + `fastify.decorate('sendPush', ...)`
+- `views/home.ejs` — onboarding dialog HTML + JS popup logic
+
 ## Run
 `node server/index.js` — listens on `127.0.0.1:3000` (or `$PORT`)
 

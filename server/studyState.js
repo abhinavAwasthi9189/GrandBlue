@@ -10,18 +10,18 @@ function getWeekStartIST(nowMs = Date.now()) {
   return ist.getTime() - IST_OFFSET;
 }
 
-function weekTotalForUser(db, userId, weekStart) {
+function weekTotalForUser(db, userId, weekStart, nowMs) {
+  if (nowMs === undefined) nowMs = Date.now();
   const weekEnd = weekStart + WEEK_MS;
-  const now = Date.now();
   return db.prepare(`
     SELECT COALESCE(SUM(
-      MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)
+      MAX(0, MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?))
     ), 0) AS total
     FROM sessions
     WHERE user_id = ?
       AND start_ms < ?
       AND (end_ms IS NULL OR end_ms > ?)
-  `).get(now, weekEnd, weekStart, userId, weekEnd, weekStart).total;
+  `).get(nowMs, weekEnd, weekStart, userId, weekEnd, weekStart).total;
 }
 
 function getMemberState(db, userId) {
@@ -33,6 +33,7 @@ function getMemberState(db, userId) {
     "SELECT end_ms FROM sessions WHERE user_id = ? AND end_ms IS NOT NULL ORDER BY end_ms DESC LIMIT 1"
   ).get(userId);
   const nowMs = Date.now();
+  const fallbackNowMs = active ? active.start_ms : nowMs;
   return {
     userId: user.id,
     username: user.username,
@@ -41,7 +42,7 @@ function getMemberState(db, userId) {
     startMs: active ? active.start_ms : null,
     lastHeartbeatMs: active ? active.last_heartbeat_ms : null,
     lastEndMs: last ? last.end_ms : null,
-    weekTotalMs: weekTotalForUser(db, userId, getWeekStartIST(nowMs)),
+    weekTotalMs: weekTotalForUser(db, userId, getWeekStartIST(nowMs), fallbackNowMs),
   };
 }
 
@@ -68,7 +69,7 @@ function weekTotalsForGroup(db, groupId, weekStart, weekEnd) {
   return db.prepare(`
     SELECT u.id, u.username,
       COALESCE(SUM(
-        MIN(COALESCE(s.end_ms, ?), ?) - MAX(s.start_ms, ?)
+        MAX(0, MIN(COALESCE(s.end_ms, ?), ?) - MAX(s.start_ms, ?))
       ), 0) AS total_ms
     FROM memberships m
     JOIN users u ON u.id = m.user_id

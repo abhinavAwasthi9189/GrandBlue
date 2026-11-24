@@ -6,10 +6,11 @@
     <div class="error-strip"><%= error %></div>
   <% } %>
 
+  <div id="home-data" data-has-leetcode="<%= hasLeetcode ? '1' : '0' %>" style="display:none"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-lg)">
     <h1 style="font-size:var(--font-xl);font-weight:700">Groups</h1>
     <div style="display:flex;align-items:center;gap:var(--space-sm)">
-      <button class="btn btn-ghost btn-sm mobile-join-row" id="open-join" type="button">Join with code</button>
+      <button class="btn btn-ghost btn-sm" id="open-join" type="button">Join with code</button>
       <button class="btn btn-primary btn-sm desktop-new-btn" id="desktop-new-btn" type="button">New group</button>
       <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
     </div>
@@ -117,6 +118,30 @@
     </div>
   </div>
 
+  <!-- Onboarding dialog (notifications + LeetCode link) -->
+  <div class="dialog-overlay" id="onboard-dialog" style="display:none">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div class="dialog-title">Finish setting up</div>
+        <button class="dialog-close" id="onboard-close">✕</button>
+      </div>
+      <div id="onboard-notif" style="display:none">
+        <p style="margin-bottom:var(--space-md);color:var(--text-secondary);font-size:var(--font-sm)">Turn on notifications to get nudged when friends invite you or ask you to study.</p>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" id="onboard-notif-later" type="button">Later</button>
+          <button class="btn btn-primary" id="onboard-notif-on" type="button" style="flex:1">Turn on notifications</button>
+        </div>
+      </div>
+      <div id="onboard-lc" style="display:none;margin-top:var(--space-md)">
+        <p style="margin-bottom:var(--space-md);color:var(--text-secondary);font-size:var(--font-sm)">Link your LeetCode username to compete on solved problems and XP.</p>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" id="onboard-lc-later" type="button">Later</button>
+          <button class="btn btn-primary" id="onboard-lc-link" type="button" style="flex:1">Link LeetCode</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function() {
       var createDialog = document.getElementById('create-dialog');
@@ -131,5 +156,109 @@
       var desktopNewBtn = document.getElementById('desktop-new-btn');
       if (desktopNewBtn) { desktopNewBtn.addEventListener('click', function() { createDialog.style.display = 'flex'; }); }
     })();
+
+    // ---- Onboarding popups (notifications + LeetCode link) ----
+    (function() {
+      var shownNotif = sessionStorage.getItem('abs-onboard-notif');
+      var shownLc = sessionStorage.getItem('abs-onboard-lc');
+      if (shownNotif && shownLc) return;
+
+      var dialog = document.getElementById('onboard-dialog');
+      function open() { if (dialog) dialog.style.display = 'flex'; }
+      function close() { if (dialog) dialog.style.display = 'none'; }
+
+      var notifCard = document.getElementById('onboard-notif');
+      var lcCard = document.getElementById('onboard-lc');
+      var notifActive = false;
+      var lcActive = false;
+
+      function showNotif() {
+        if (shownNotif || !notifCard) return;
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        fetch('/push/status').then(function(r) { return r.json(); }).then(function(state) {
+          if (state.vapidConfigured && !state.subscribed && 'Notification' in window) {
+            notifCard.style.display = 'block';
+            notifActive = true;
+            open();
+          }
+        }).catch(function() {});
+      }
+
+      function showLc() {
+        if (shownLc || !lcCard) return;
+        var dataEl = document.getElementById('home-data');
+        if (dataEl && dataEl.dataset.hasLeetcode === '1') return;
+        lcCard.style.display = 'block';
+        lcActive = true;
+        open();
+      }
+
+      var onboardClose = document.getElementById('onboard-close');
+      if (onboardClose) onboardClose.addEventListener('click', function() { close(); });
+      if (dialog) dialog.addEventListener('click', function(e) { if (e.target === dialog) close(); });
+
+      var notifLater = document.getElementById('onboard-notif-later');
+      if (notifLater) notifLater.addEventListener('click', function() {
+        sessionStorage.setItem('abs-onboard-notif', '1');
+        notifCard.style.display = 'none';
+        notifActive = false;
+        if (!lcActive) close();
+      });
+
+      var lcLater = document.getElementById('onboard-lc-later');
+      if (lcLater) lcLater.addEventListener('click', function() {
+        sessionStorage.setItem('abs-onboard-lc', '1');
+        lcCard.style.display = 'none';
+        lcActive = false;
+        if (!notifActive) close();
+      });
+
+      var lcLink = document.getElementById('onboard-lc-link');
+      if (lcLink) lcLink.addEventListener('click', function() { window.location.href = '/you'; });
+
+      // Init — show onboarding popups after a short delay
+      setTimeout(function() { showNotif(); setTimeout(showLc, 500); }, 1000);
+
+      var notifOn = document.getElementById('onboard-notif-on');
+      if (notifOn) notifOn.addEventListener('click', function() {
+        function base64ToUint8(b64) {
+          var raw = b64.replace(/-/g, '+').replace(/_/g, '/');
+          while (raw.length % 4) raw += '=';
+          return new Uint8Array(atob(raw).split('').map(function(c) { return c.charCodeAt(0); }));
+        }
+        function run() {
+          navigator.serviceWorker.register('/sw.js').then(function(reg) {
+            fetch('/push/vapid-public-key').then(function(r) { return r.json(); }).then(function(d) {
+              if (!d.key) return;
+              var u = base64ToUint8(d.key);
+              reg.pushManager.getSubscription().then(function(oldSub) {
+                if (oldSub) {
+                  return fetch('/push/unsubscribe', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint: oldSub.endpoint }),
+                  }).then(function() { return oldSub.unsubscribe(); });
+                }
+              }).then(function() {
+                return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u });
+              }).then(function(sub) {
+                return fetch('/push/subscribe', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.toJSON().keys }),
+                }).then(function(r) { return r.json(); });
+              }).then(function() {
+                sessionStorage.setItem('abs-onboard-notif', '1');
+                notifCard.style.display = 'none';
+                notifActive = false;
+                if (!lcActive) close();
+              }).catch(function() {});
+            });
+          });
+        }
+        if (Notification.permission !== 'granted') {
+          Notification.requestPermission().then(function(p) { if (p === 'granted') run(); });
+        } else { run(); }
+      });
+    })();
   </script>
-<%- include('_layout_close') %>
+
+  <%- include('_layout_close') %>

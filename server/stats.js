@@ -22,7 +22,7 @@ function getStreak(db, userId) {
     const dayStart = todayStart - i * DAY_MS;
     const dayEnd = dayStart + DAY_MS;
     const dayTotal = db.prepare(`
-      SELECT COALESCE(SUM(MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)), 0) AS total
+      SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?))), 0) AS total
       FROM sessions WHERE user_id = ? AND start_ms < ? AND (end_ms IS NULL OR end_ms > ?)
     `).get(dayEnd, dayEnd, dayStart, userId, dayEnd, dayStart).total;
     if (dayTotal > 0) { streak++; }
@@ -58,7 +58,7 @@ function getLast8Weeks(db, userId) {
     const ws = weekStart - i * WEEK_MS;
     const we = ws + WEEK_MS;
     const total = db.prepare(`
-      SELECT COALESCE(SUM(MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)), 0) AS total
+      SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?))), 0) AS total
       FROM sessions WHERE user_id = ? AND start_ms < ? AND (end_ms IS NULL OR end_ms > ?)
     `).get(we, we, ws, userId, we, ws).total;
     weeks.push({ weekStart: ws, totalMs: total });
@@ -78,7 +78,7 @@ function getLast7Days(db, userId) {
     const ds = todayStart - i * DAY_MS;
     const de = ds + DAY_MS;
     const total = db.prepare(`
-      SELECT COALESCE(SUM(MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?)), 0) AS total
+      SELECT COALESCE(SUM(MAX(0, MIN(COALESCE(end_ms, ?), ?) - MAX(start_ms, ?))), 0) AS total
       FROM sessions WHERE user_id = ? AND start_ms < ? AND (end_ms IS NULL OR end_ms > ?)
     `).get(de, de, ds, userId, de, ds).total;
     const label = new Date(ds + 5.5 * 60 * 60 * 1000).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short' });

@@ -173,6 +173,13 @@ module.exports = async function (fastify, opts) {
       return reply.redirect('/group/' + req.params.id + '?error=' + encodeURIComponent(e.message));
     }
 
+    // Notify the invited user that they've been asked to join
+    const inviterName = req.session.username || 'Someone';
+    const groupName = fastify.db.prepare('SELECT name FROM groups WHERE id = ?').get(req.params.id);
+    if (typeof fastify.sendPush === 'function') {
+      fastify.sendPush(target.id, 'GrandBlue', inviterName + ' invited you to join "' + (groupName && groupName.name) + '"', '/group/' + req.params.id);
+    }
+
     return reply.redirect('/group/' + req.params.id);
   });
 
@@ -194,22 +201,22 @@ module.exports = async function (fastify, opts) {
     return reply.redirect('/group/' + req.params.id);
   });
 
-  fastify.get('/join/:code', async (req, reply) => {
-    const invite = fastify.db.prepare(
+  function joinByCode(db, code, userId) {
+    const invite = db.prepare(
       'SELECT i.*, g.name AS group_name FROM invites i JOIN groups g ON g.id = i.group_id WHERE i.code = ?'
-    ).get(req.params.code);
+    ).get(code);
 
     if (!invite || invite.expires_at < Date.now()) {
-      return reply.view('join', { session: req.session, error: 'Invalid or expired invite link' });
+      return { error: 'Invalid or expired invite code. Please check with the group owner.' };
     }
 
-    const existing = fastify.db.prepare(
+    const existing = db.prepare(
       'SELECT * FROM memberships WHERE group_id = ? AND user_id = ?'
-    ).get(invite.group_id, req.session.userId);
-    if (existing) return reply.redirect('/');
+    ).get(invite.group_id, userId);
+    if (existing) return { redirect: '/' };
 
-    const cap = fastify.db.transaction(() => {
-      const active = fastify.db.prepare(
+    const cap = db.transaction(() => {
+      const active = db.prepare(
         "SELECT COUNT(*) AS cnt FROM memberships WHERE group_id = ? AND status = 'active'"
       ).get(invite.group_id).cnt;
 
@@ -217,18 +224,45 @@ module.exports = async function (fastify, opts) {
         throw new Error('Group is full (max 15 active members)');
       }
 
-      fastify.db.prepare(
+      db.prepare(
         'INSERT INTO memberships (group_id, user_id, role, status, created_at) VALUES (?, ?, ?, ?, ?)'
-      ).run(invite.group_id, req.session.userId, 'member', 'requested', Date.now());
+      ).run(invite.group_id, userId, 'member', 'requested', Date.now());
     });
 
     try {
       cap();
     } catch (e) {
-      return reply.view('join', { session: req.session, error: e.message });
+      return { error: e.message };
     }
 
-    return reply.view('join', { session: req.session, success: 'Join request sent! Waiting for admin approval.', group_id: invite.group_id });
+    return { success: 'Join request sent! Waiting for admin approval.', group_id: invite.group_id };
+  }
+
+  function notifyGroupAdmins(groupId, title, body, url) {
+    const admins = fastify.db.prepare(
+      "SELECT user_id FROM memberships WHERE group_id = ? AND role = 'admin' AND status = 'active'"
+    ).all(groupId);
+    for (const a of admins) {
+      if (typeof fastify.sendPush === 'function') fastify.sendPush(a.user_id, title, body, url);
+    }
+  }
+
+  fastify.post('/join', async (req, reply) => {
+    const code = (req.body && req.body.code || '').trim();
+    if (!code) return reply.redirect('/?error=' + encodeURIComponent('Enter an invite code'));
+    const result = joinByCode(fastify.db, code, req.session.userId);
+    if (result.redirect) return reply.redirect(result.redirect);
+    if (result.error) return reply.view('join', { session: req.session, error: result.error });
+    notifyGroupAdmins(result.group_id, 'GrandBlue', req.session.username + ' wants to join your group', '/group/' + result.group_id);
+    return reply.view('join', { session: req.session, success: result.success, group_id: result.group_id });
+  });
+
+  fastify.get('/join/:code', async (req, reply) => {
+    const result = joinByCode(fastify.db, req.params.code, req.session.userId);
+    if (result.redirect) return reply.redirect(result.redirect);
+    if (result.error) return reply.view('join', { session: req.session, error: result.error });
+    notifyGroupAdmins(result.group_id, 'GrandBlue', req.session.username + ' wants to join your group', '/group/' + result.group_id);
+    return reply.view('join', { session: req.session, success: result.success, group_id: result.group_id });
   });
 
   fastify.post('/group/:id/approve/:userId', async (req, reply) => {
@@ -261,6 +295,11 @@ module.exports = async function (fastify, opts) {
       cap();
     } catch (e) {
       return reply.redirect('/group/' + req.params.id + '?error=' + encodeURIComponent(e.message));
+    }
+
+    const groupName = fastify.db.prepare('SELECT name FROM groups WHERE id = ?').get(req.params.id);
+    if (typeof fastify.sendPush === 'function') {
+      fastify.sendPush(parseInt(req.params.userId), 'GrandBlue', 'You were accepted into "' + (groupName && groupName.name) + '"!', '/group/' + req.params.id);
     }
 
     return reply.redirect('/group/' + req.params.id);
@@ -304,6 +343,11 @@ module.exports = async function (fastify, opts) {
       cap();
     } catch (e) {
       return reply.redirect('/?error=' + encodeURIComponent(e.message));
+    }
+
+    const groupName = fastify.db.prepare('SELECT name FROM groups WHERE id = ?').get(req.params.groupId);
+    if (typeof fastify.sendPush === 'function') {
+      notifyGroupAdmins(parseInt(req.params.groupId), 'GrandBlue', req.session.username + ' accepted your invite to "' + (groupName && groupName.name) + '"', '/group/' + req.params.groupId);
     }
 
     return reply.redirect('/group/' + req.params.groupId);

@@ -193,7 +193,7 @@ module.exports = async function (fastify, opts) {
       const dayData = members.map(m => {
         const row = db.prepare(`
           SELECT COALESCE(SUM(
-            MIN(COALESCE(s.end_ms, ?), ?) - MAX(s.start_ms, ?)
+            MAX(0, MIN(COALESCE(s.end_ms, ?), ?) - MAX(s.start_ms, ?))
           ), 0) AS total_ms
           FROM sessions s
           WHERE s.user_id = ?

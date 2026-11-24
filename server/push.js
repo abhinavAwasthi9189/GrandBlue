@@ -42,8 +42,30 @@ function requireAuth(req, reply) {
   return true;
 }
 
+async function sendPush(db, userId, title, body, url) {
+  if (!VAPID_CFG) return;
+  const subs = db.prepare(
+    'SELECT endpoint, keys_json FROM push_subscriptions WHERE user_id = ?'
+  ).all(userId);
+  const payload = JSON.stringify({ title, body, icon: '/icon.svg', data: { url } });
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({
+        endpoint: sub.endpoint,
+        keys: JSON.parse(sub.keys_json),
+      }, payload);
+    } catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+      }
+    }
+  }
+}
+
 module.exports = async function (fastify, opts) {
   const db = fastify.db;
+
+  fastify.decorate('sendPush', (userId, title, body, url) => sendPush(db, userId, title, body, url));
 
   if (VAPID_CFG) {
     fastify.log.info('VAPID keys present; public key starts with: %s', VAPID_PUBLIC_KEY.slice(0, 6));
@@ -193,9 +215,15 @@ module.exports = async function (fastify, opts) {
         return reply.send({ ok: true, noPush: true, targetName });
       }
 
+      const senderName = req.session.username || 'Someone';
+      const nudgeType = req.body && req.body.type === 'leetwars' ? 'leetwars' : 'study';
+      const body = nudgeType === 'leetwars'
+        ? senderName + ' says its time for another Leetcode problem!!'
+        : senderName + ' calling you to study. Tap to join the session.';
+
       const payload = JSON.stringify({
         title: 'GrandBlue',
-        body: 'Time to study together',
+        body,
         icon: '/icon.svg',
         data: { url: '/group/' + groupId },
       });

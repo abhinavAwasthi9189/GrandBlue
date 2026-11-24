@@ -456,7 +456,11 @@
           var targetId = btn.getAttribute('data-user');
           var msgEl = btn.parentElement.querySelector('.nudge-msg');
           msgEl.textContent = '';
-          fetch(GROUP_PATH + '/nudge/' + targetId, { method: 'POST' })
+          fetch(GROUP_PATH + '/nudge/' + targetId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'type=study'
+          })
             .then(function(r) { return r.json(); })
             .then(function(d) {
               if (d.ok) {
