@@ -24,6 +24,12 @@ function weekTotalForUser(db, userId, weekStart, nowMs) {
   `).get(nowMs, weekEnd, weekStart, userId, weekEnd, weekStart).total;
 }
 
+function getDayStartIST(nowMs) {
+  const ist = new Date(nowMs + IST_OFFSET);
+  ist.setUTCHours(0, 0, 0, 0);
+  return ist.getTime() - IST_OFFSET;
+}
+
 function getMemberState(db, userId) {
   const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(userId);
   const active = db.prepare(
@@ -43,6 +49,7 @@ function getMemberState(db, userId) {
     lastHeartbeatMs: active ? active.last_heartbeat_ms : null,
     lastEndMs: last ? last.end_ms : null,
     weekTotalMs: weekTotalForUser(db, userId, getWeekStartIST(nowMs), fallbackNowMs),
+    todayMs: weekTotalForUser(db, userId, getDayStartIST(nowMs), fallbackNowMs),
   };
 }
 
